@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set active='usage' %}
+{% block content %}
+
+<div class="grid g3">
+  <div class="stat"><div class="n">{{ total_summary.c }}</div><div class="l">总调用</div></div>
+  <div class="stat"><div class="n">{{ total_summary.s }}</div><div class="l">成功</div></div>
+  <div class="stat"><div class="n">{{ total_summary.p }}</div><div class="l">总消耗积分</div></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+    <h3 style="margin:0">调用记录 <span class="muted small" style="font-weight:400">（共 {{ total }} 条）</span></h3>
+    <form method="get" class="row" style="gap:8px;margin:0;flex-wrap:nowrap;align-items:center">
+      <input name="keyword" value="{{ keyword }}" placeholder="搜索类型 / 详情"
+             style="width:200px" onkeydown="if(event.key==='Enter'){event.preventDefault();this.form.submit();}">
+      <select name="type" onchange="this.form.submit()" style="width:120px">
+        <option value="">全部类型</option>
+        {% for p in pricing %}<option value="{{ p.type }}" {% if type_filter==p.type %}selected{% endif %}>{{ p.type }}</option>{% endfor %}
+      </select>
+      <select name="success" onchange="this.form.submit()" style="width:100px">
+        <option value="">全部结果</option>
+        <option value="1" {% if success_filter=='1' %}selected{% endif %}>成功</option>
+        <option value="0" {% if success_filter=='0' %}selected{% endif %}>失败</option>
+      </select>
+      <input type="date" name="date_from" value="{{ date_from }}" style="width:140px" onchange="this.form.submit()">
+      <span class="muted">~</span>
+      <input type="date" name="date_to" value="{{ date_to }}" style="width:140px" onchange="this.form.submit()">
+      {% if keyword or type_filter or success_filter or date_from or date_to %}<a class="btn btn-ghost btn-sm" href="{{ url_for('web.usage') }}">清除</a>{% endif %}
+    </form>
+  </div>
+
+  {% if rows %}
+  <table>
+    <tr><th>时间</th><th>类型</th><th>结果</th><th>消耗积分</th><th>耗时</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td class="muted">{{ r.created_at|ctime }}</td>
+      <td><code>{{ r.type }}</code></td>
+      <td>{% if r.success %}<span class="pill pill-on">成功</span>{% else %}<span class="pill pill-off">失败</span>{% endif %}</td>
+      <td>{{ r.points }}</td>
+      <td class="muted">{% if r.duration_ms %}{{ r.duration_ms }} ms{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if pages > 1 %}
+  <div class="row mt">
+    {% if page>1 %}<a class="btn btn-ghost btn-sm" href="?type={{ type_filter }}&success={{ success_filter }}&keyword={{ keyword }}&date_from={{ date_from }}&date_to={{ date_to }}&page={{ page-1 }}">上一页</a>{% endif %}
+    <span class="muted small">第 {{ page }} / {{ pages }} 页</span>
+    {% if page<pages %}<a class="btn btn-ghost btn-sm" href="?type={{ type_filter }}&success={{ success_filter }}&keyword={{ keyword }}&date_from={{ date_from }}&date_to={{ date_to }}&page={{ page+1 }}">下一页</a>{% endif %}
+  </div>
+  {% endif %}
+  {% else %}<p class="empty">暂无记录</p>{% endif %}
+</div>
+{% endblock %}

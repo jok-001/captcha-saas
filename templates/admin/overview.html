@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid g4">
+  <div class="stat"><div class="n">{{ total_users }}</div><div class="l">总用户数</div></div>
+  <div class="stat"><div class="n">{{ active_users }}</div><div class="l">启用中</div></div>
+  <div class="stat"><div class="n">{{ total_credits }}</div><div class="l">系统内总积分</div></div>
+  <div class="stat"><div class="n">{{ usage_total.c }}</div><div class="l">总调用次数</div></div>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">最近调用（全平台）</h3>
+  {% if logs %}
+  <table>
+    <tr><th>时间</th><th>用户</th><th>类型</th><th>结果</th><th>积分</th></tr>
+    {% for r in logs %}
+    <tr><td class="muted">{{ r.created_at|ctime }}</td><td>{{ users.get(r.user_id, r.user_id) if users else r.user_id }}</td><td><code>{{ r.type }}</code></td><td>{% if r.success %}<span class="pill pill-on">成功</span>{% else %}<span class="pill pill-off">失败</span>{% endif %}</td><td>{{ r.points }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">暂无调用。</p>{% endif %}
+</div>
+{% endblock %}

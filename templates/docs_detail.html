@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% set active='docs' %}
+{% block title %}{{ doc.title }} - 使用文档{% endblock %}
+{% block content %}
+
+<div class="doc-detail-head card">
+  <div class="doc-detail-title-row">
+    <a href="{{ url_for('web.docs') }}" class="back-link">← 返回文档首页</a>
+    <h2>{{ doc.title }}</h2>
+  </div>
+  <div class="doc-detail-meta">
+    <span class="pill {% if doc.enabled %}pill-on{% else %}pill-off{% endif %}">
+      {{ '已接入' if doc.enabled else '规划中' }}
+    </span>
+    <span class="doc-detail-type"><code>type: {{ doc.type }}</code></span>
+    <span class="doc-detail-price"><b>{{ doc.points }}</b> 积分 / 次</span>
+    {% if doc.note %}
+    <span class="doc-detail-note muted">{{ doc.note }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>1. 请求端点</h3>
+  <div class="doc-endpoints">
+    {% for ep in doc.endpoints %}
+    <div class="doc-endpoint">
+      <span class="method method-post">POST</span>
+      <code class="ep-path">{{ api_base }}{{ ep.path }}</code>
+      {% if ep.desc %}<span class="muted small">{{ ep.desc }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>2. 请求参数</h3>
+  <p class="muted small">所有参数统一放在 JSON body 的 <code>param</code> 对象内（或使用专属端点时直接放顶层）。</p>
+  <table class="doc-table">
+    <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>说明</th></tr></thead>
+    <tbody>
+      {% for p in doc.params %}
+      <tr>
+        <td><code>{{ p.name }}</code></td>
+        <td><code>{{ p.type }}</code></td>
+        <td>{% if p.required %}<span class="req yes">必填</span>{% else %}<span class="req no">可选</span>{% endif %}</td>
+        <td>{% if p.default %}<code>{{ p.default }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ p.desc }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>3. 请求示例</h3>
+  <div class="doc-tabs">
+    <div class="doc-tab-bar">
+      {% for ex in doc.examples %}
+      <button class="doc-tab-btn {% if loop.first %}active{% endif %}" onclick="switchTab(this, 'tab-{{ loop.index }}')">{{ ex.lang }}</button>
+      {% endfor %}
+      <button class="btn btn-ghost btn-sm copy-current" onclick="copyCurrent(this)">复制当前代码</button>
+    </div>
+    {% for ex in doc.examples %}
+    <div class="doc-tab-panel {% if loop.first %}show{% endif %}" id="tab-{{ loop.index }}" data-code="{{ ex.code|e }}">
+      {% if ex.note %}<div class="doc-example-note muted small">{{ ex.note }}</div>{% endif %}
+      <pre>{{ ex.code }}</pre>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>4. 响应格式</h3>
+  <div class="doc-response">
+    <button class="btn btn-ghost btn-sm copy-current" onclick="copyResponse(this)">复制响应示例</button>
+    <pre id="resp-example">{{ doc.response_example }}</pre>
+  </div>
+  <h4>响应字段说明</h4>
+  <table class="doc-table">
+    <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+    <tbody>
+      {% for r in doc.response_fields %}
+      <tr>
+        <td><code>{{ r.name }}</code></td>
+        <td><code>{{ r.type }}</code></td>
+        <td>{{ r.desc }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function switchTab(btn, panelId) {
+  var bar = btn.parentElement;
+  var container = bar.parentElement;
+  bar.querySelectorAll('.doc-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  container.querySelectorAll('.doc-tab-panel').forEach(function(p) { p.classList.remove('show'); });
+  document.getElementById(panelId).classList.add('show');
+}
+function copyCurrent(btn) {
+  var active = btn.parentElement.parentElement.querySelector('.doc-tab-panel.show pre');
+  if (!active) return;
+  navigator.clipboard.writeText(active.innerText).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = '已复制!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  });
+}
+function copyResponse(btn) {
+  var pre = document.getElementById('resp-example');
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.innerText).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = '已复制!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  });
+}
+</script>
+
+<style>
+.doc-detail-head { margin-bottom: 18px; }
+.doc-detail-title-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.doc-detail-title-row h2 { margin: 0; font-size: 22px; }
+.back-link { font-size: 13px; color: var(--primary, #2563eb); text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+.doc-detail-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.doc-detail-type { color: var(--text-muted, #6b7280); }
+.doc-detail-price { font-size: 14px; color: var(--primary, #2563eb); }
+.doc-detail-note { font-size: 13px; }
+.doc-endpoints { display: flex; flex-direction: column; gap: 8px; }
+.doc-endpoint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; background: var(--bg-soft, #f9fafb); border-radius: 8px; border: 1px solid var(--border, #e5e7eb); }
+.method { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
+.method-post { background: var(--primary, #2563eb); color: #fff; }
+.ep-path { font-size: 14px; font-weight: 500; color: var(--text, #1f2937); }
+.doc-tabs { margin-top: 8px; }
+.doc-tab-bar { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.doc-tab-btn { font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border, #e5e7eb); background: var(--bg-soft, #f9fafb); color: var(--text-muted, #6b7280); cursor: pointer; transition: all 0.15s; }
+.doc-tab-btn:hover { border-color: var(--primary, #2563eb); color: var(--primary, #2563eb); }
+.doc-tab-btn.active { background: var(--primary, #2563eb); color: #fff; border-color: var(--primary, #2563eb); }
+.doc-tab-panel { display: none; }
+.doc-tab-panel.show { display: block; }
+.doc-tab-panel.show pre { margin: 0; }
+.doc-example-note { margin-bottom: 6px; }
+.doc-response { position: relative; margin-bottom: 8px; }
+.doc-response .copy-current { position: absolute; top: 8px; right: 8px; z-index: 1; }
+.doc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.doc-table th, .doc-table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border, #e5e7eb); vertical-align: top; }
+.doc-table th { background: var(--bg-soft, #f9fafb); font-weight: 600; color: var(--text, #1f2937); white-space: nowrap; }
+.doc-table td code { white-space: nowrap; }
+.req { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.req.yes { background: #fef2f2; color: #dc2626; }
+.req.no { background: #f0fdf4; color: #16a34a; }
+pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.55; font-family: 'SF Mono', 'Fira Code', Consolas, monospace; }
+h4 { margin: 18px 0 8px; font-size: 15px; color: var(--text, #1f2937); }
+.muted { color: var(--text-muted, #6b7280); }
+.small { font-size: 12px; }
+</style>
+{% endblock %}

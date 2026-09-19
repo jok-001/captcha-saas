@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% set active='users' %}
+{% block content %}
+
+<div class="row" style="align-items:center;justify-content:space-between;margin-bottom:12px">
+  <div>
+    <h3 style="margin:0">用户管理</h3>
+    <div class="muted small mt" style="margin-top:4px">所有积分变动（含管理员调整、注册赠送）都会写入积分流水，可在「积分流水」中核对。</div>
+  </div>
+  <button class="btn" onclick="openModal('createModal')">＋ 新增用户</button>
+</div>
+
+<div class="card" style="padding:16px 22px">
+  <div class="row" style="gap:10px;align-items:center">
+    <form method="get" style="margin:0;display:inline">
+      <input name="keyword" value="{{ keyword }}" placeholder="搜索用户名 / 邮箱"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();this.form.submit();}">
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>操作</th></tr>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.id }}</td>
+      <td><b>{{ u.username }}</b></td>
+      <td class="muted">{{ u.email or '—' }}</td>
+      <td>{% if u.role=='admin' %}<span class="tag">admin</span>{% else %}user{% endif %}</td>
+      <td>{% if u.status=='active' %}<span class="pill pill-on">启用</span>{% else %}<span class="pill pill-off">停用</span>{% endif %}</td>
+      <td><b>{{ u.credits }}</b></td>
+      <td class="muted">{{ u.created_at|ctime }}</td>
+      <td>
+        <div class="row" style="gap:6px;flex-wrap:nowrap">
+          <button class="btn btn-ghost btn-sm" onclick='openEdit({{ u|tojson }})'>编辑</button>
+          <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.user_transactions', uid=u.id) }}">流水</a>
+          {% if u.username != 'admin' %}
+          <form method="post" action="{{ url_for('admin.user_delete', uid=u.id) }}" style="display:inline"
+                onsubmit="return confirm('确定删除用户 {{ u.username }} ？\\n将同时删除其 Token / 用量 / 积分流水，不可恢复！');">
+            <button class="btn btn-danger btn-sm">删除</button>
+          </form>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="modal-mask" id="createModal" onclick="if(event.target===this)closeModal(this)">
+  <div class="modal">
+    <h3 style="margin:0 0 6px">新增用户</h3>
+    <form method="post" action="{{ url_for('admin.user_create') }}">
+      <label>用户名（3-20 位字母/数字/下划线）</label>
+      <input name="username" required pattern="[A-Za-z0-9_]{3,20}">
+      <label>邮箱（可空）</label>
+      <input name="email" type="email" placeholder="user@example.com">
+      <label>密码（至少 6 位）</label>
+      <input name="password" type="password" required minlength="6">
+      <div class="row">
+        <div style="flex:1"><label>角色</label><select name="role"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
+        <div style="flex:1"><label>初始积分</label><input name="credits" type="number" value="0" min="0"></div>
+      </div>
+      <div class="row mt">
+        <button type="submit">创建</button>
+        <button type="button" class="btn btn-ghost" onclick="closeModal(document.getElementById('createModal'))">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-mask" id="editModal" onclick="if(event.target===this)closeModal(this)">
+  <div class="modal">
+    <h3 style="margin:0 0 6px">编辑用户：<span id="editName"></span></h3>
+    <form method="post" id="editForm">
+      <label>邮箱</label>
+      <input name="email" id="editEmail" type="email" placeholder="user@example.com">
+      <div class="row">
+        <div style="flex:1"><label>角色</label><select name="role" id="editRole"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
+        <div style="flex:1"><label>状态</label><select name="status" id="editStatus"><option value="active">启用</option><option value="disabled">停用</option></select></div>
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>积分增减（可负）</label><input name="delta" id="editDelta" type="number" placeholder="如 +50 / -20" value="0"></div>
+        <div style="flex:1"><label>调整原因</label><input name="reason" id="editReason" placeholder="如：客户充值 / 违规扣减"></div>
+      </div>
+      <div class="row mt">
+        <button type="submit">保存</button>
+        <button type="button" class="btn btn-ghost" onclick="closeModal(document.getElementById('editModal'))">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openModal(el){ el.style.display='flex'; }
+function closeModal(el){ el.style.display='none'; }
+function openEdit(u){
+  document.getElementById('editName').textContent = u.username;
+  document.getElementById('editEmail').value = u.email || '';
+  document.getElementById('editRole').value = u.role;
+  document.getElementById('editStatus').value = u.status;
+  document.getElementById('editDelta').value = 0;
+  document.getElementById('editReason').value = '';
+  document.getElementById('editForm').action = '/admin/user/' + u.id + '/edit';
+  openModal(document.getElementById('editModal'));
+}
+</script>
+{% endblock %}

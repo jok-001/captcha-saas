@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set active='dashboard' %}
+{% block content %}
+<div class="grid g4">
+  <div class="stat"><div class="n">{{ user.credits }}</div><div class="l">当前积分余额</div></div>
+  <div class="stat"><div class="n">{{ total.c }}</div><div class="l">累计调用次数</div></div>
+  <div class="stat"><div class="n">{{ total.s }}</div><div class="l">成功次数</div></div>
+  <div class="stat"><div class="n">{{ total.p }}</div><div class="l">累计消耗积分</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h3 style="margin-top:0">按类型消耗</h3>
+    {% if by_type %}
+    <table>
+      <tr><th>类型</th><th>调用</th><th>成功</th><th>消耗积分</th></tr>
+      {% for r in by_type %}
+      <tr><td><code>{{ r.type }}</code></td><td>{{ r.c }}</td><td>{{ r.s }}</td><td>{{ r.p }}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">暂无调用记录。</p>{% endif %}
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">最近调用</h3>
+    {% if recent %}
+    <table>
+      <tr><th>时间</th><th>类型</th><th>结果</th><th>积分</th></tr>
+      {% for r in recent %}
+      <tr>
+        <td class="muted">{{ r.created_at|ctime }}</td>
+        <td><code>{{ r.type }}</code></td>
+        <td>{% if r.success %}<span class="pill pill-on">成功</span>{% else %}<span class="pill pill-off">失败</span>{% endif %}</td>
+        <td>{{ r.points }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">暂无调用记录。</p>{% endif %}
+    <a class="btn btn-ghost btn-sm mt" href="{{ url_for('web.usage') }}">查看全部 →</a>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">可用服务与单价</h3>
+  <table>
+    <tr><th>类型</th><th>单价(积分/次)</th><th>状态</th><th>说明</th></tr>
+    {% for p in pricing %}
+    <tr>
+      <td><code>{{ p.type }}</code></td>
+      <td>{{ p.points }}</td>
+      <td>{% if p.enabled %}<span class="pill pill-on">已接入</span>{% else %}<span class="pill pill-off">规划中</span>{% endif %}</td>
+      <td class="muted">{{ p.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <a class="btn btn-ghost btn-sm mt" href="{{ url_for('web.docs') }}">查看 API 文档 →</a>
+</div>
+{% endblock %}

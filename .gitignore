@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.env
+venv/
+.venv/
+
+# SQLite
+data/*.db
+data/*.db-*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Service file (deployment-specific)
+huya_api.service
+
+# Solver implementations (not uploaded to GitHub)
+solvers/
+
+# Internal delivery notes (contains server IP / credentials)
+overview.md

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% set active='docs' %}
+{% block title %}使用文档 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+
+<div class="doc-intro card">
+  <h3>通用信息</h3>
+  <div class="doc-grid">
+    <div class="doc-cell"><div class="doc-k">Base URL</div><div class="doc-v"><code id="base">{{ api_base }}</code></div></div>
+    <div class="doc-cell"><div class="doc-k">协议</div><div class="doc-v">HTTP / HTTPS，JSON 请求与响应</div></div>
+    <div class="doc-cell"><div class="doc-k">鉴权</div><div class="doc-v">Header <code>X-API-Key: &lt;你的Token&gt;</code>（也支持 <code>Authorization: Bearer</code> 或 <code>?key=</code>）</div></div>
+    <div class="doc-cell"><div class="doc-k">积分模型</div><div class="doc-v">调用<b>成功</b>时按单价扣减积分；失败不扣。积分不足返回 <code>402</code>。</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>错误码速查</h3>
+  <table class="doc-table">
+    <thead><tr><th>HTTP</th><th>含义</th><th>处理建议</th></tr></thead>
+    <tbody>
+      <tr><td><code>200</code></td><td>请求成功（业务 <code>success</code> 字段表示是否解出）</td><td>读取 <code>result</code></td></tr>
+      <tr><td><code>400</code></td><td>参数缺失 / solver 业务错误</td><td>检查 <code>param</code></td></tr>
+      <tr><td><code>401</code></td><td>缺少或无效 Token</td><td>检查 <code>X-API-Key</code></td></tr>
+      <tr><td><code>402</code></td><td>积分不足</td><td>充值 / 兑换积分</td></tr>
+      <tr><td><code>403</code></td><td>Token 或账号被停用</td><td>在后台启用</td></tr>
+      <tr><td><code>500</code></td><td>服务端内部错误</td><td>稍后重试 / 联系支持</td></tr>
+      <tr><td><code>501</code></td><td>该类型尚未接入 / 已停用</td><td>见下方接口列表</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-head-row">
+    <h3>已接入接口</h3>
+    <span class="muted small">点击卡片进入详细文档，含参数、示例与响应说明</span>
+  </div>
+  <div class="doc-type-grid">
+    {% for p in pricing %}
+    <a href="{{ url_for('web.docs_detail', type_name=p.type) }}" class="doc-type-card {% if not p.enabled %}doc-type-card-off{% endif %}">
+      <div class="doc-type-head">
+        <code class="doc-type-name">{{ p.type }}</code>
+        {% if p.enabled %}
+        <span class="pill pill-on">已接入</span>
+        {% else %}
+        <span class="pill pill-off">规划中</span>
+        {% endif %}
+      </div>
+      <div class="doc-type-note">{{ p.note or '—' }}</div>
+      <div class="doc-type-foot">
+        <span class="doc-type-price">{{ p.points }} <small>积分/次</small></span>
+        <span class="doc-type-link">查看详细文档 →</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if current_user and current_user.role == 'admin' %}
+<div class="card">
+  <h3>管理后台</h3>
+  <div class="doc-grid">
+    <div class="doc-cell"><div class="doc-k">用户管理</div><div class="doc-v">开通/停用账号、增减积分、重置 Token</div></div>
+    <div class="doc-cell"><div class="doc-k">定价管理</div><div class="doc-v">为每种验证码设置积分单价、启停、新增类型</div></div>
+    <div class="doc-cell"><div class="doc-k">积分流水</div><div class="doc-v">全局与单用户积分变动明细</div></div>
+    <div class="doc-cell"><div class="doc-k">兑换码</div><div class="doc-v">批量生成积分兑换码发给客户</div></div>
+    <div class="doc-cell"><div class="doc-k">全局用量</div><div class="doc-v">所有用户调用记录</div></div>
+  </div>
+</div>
+{% endif %}
+
+<style>
+.doc-intro { margin-bottom: 18px; }
+.doc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 28px; }
+@media (max-width: 720px) { .doc-grid { grid-template-columns: 1fr; } }
+.doc-cell { padding: 8px 0; border-bottom: 1px dashed var(--border, #e5e7eb); }
+.doc-k { font-size: 12px; color: var(--text-muted, #6b7280); margin-bottom: 4px; }
+.doc-v { font-size: 14px; color: var(--text, #1f2937); }
+.card-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.card-head-row h3 { margin: 0; }
+.small { font-size: 12px; }
+.doc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.doc-table th, .doc-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.doc-table th { background: var(--bg-soft, #f9fafb); font-weight: 600; color: var(--text, #1f2937); }
+.doc-table td:first-child { white-space: nowrap; }
+.doc-type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.doc-type-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; background: var(--bg, #fff); text-decoration: none; color: inherit; transition: all .15s ease; }
+.doc-type-card:hover { border-color: var(--primary, #2563eb); box-shadow: 0 4px 14px rgba(37,99,235,0.12); transform: translateY(-1px); }
+.doc-type-card-off { opacity: .75; }
+.doc-type-card-off:hover { border-color: var(--border, #e5e7eb); box-shadow: none; transform: none; }
+.doc-type-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.doc-type-name { font-size: 15px; font-weight: 600; color: var(--text, #1f2937); background: var(--bg-soft, #f3f4f6); padding: 4px 10px; border-radius: 6px; }
+.doc-type-note { font-size: 13px; color: var(--text-muted, #6b7280); min-height: 36px; line-height: 1.5; }
+.doc-type-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 6px; border-top: 1px dashed var(--border, #e5e7eb); }
+.doc-type-price { font-size: 18px; font-weight: 700; color: var(--primary, #2563eb); }
+.doc-type-price small { font-size: 11px; font-weight: 400; color: var(--text-muted, #6b7280); margin-left: 2px; }
+.doc-type-link { font-size: 12px; color: var(--primary, #2563eb); font-weight: 500; }
+</style>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% set active='profile' %}
+{% block content %}
+
+<div class="grid g2">
+  <div class="card">
+    <h3 style="margin:0 0 6px">基本信息</h3>
+    <p class="muted small">用户名创建后不可修改；邮箱用于后续余额告警通知。</p>
+    <form method="post">
+      <input type="hidden" name="action" value="update_profile">
+      <label>用户名（登录名，不可修改）</label>
+      <input value="{{ user.username }}" disabled>
+      <label>邮箱</label>
+      <input name="email" type="email" value="{{ user.email or '' }}" placeholder="user@example.com">
+      <div class="row mt">
+        <button>保存资料</button>
+        <span class="muted small">当前积分：<b style="color:var(--brand)">{{ user.credits }}</b></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 6px">API Token</h3>
+    <p class="muted small">这是你调用 API 的唯一密钥。重置后旧 Token 立即失效，请妥善保管。</p>
+    {% if token_row %}
+    <div class="row" style="align-items:stretch">
+      <input class="mono" id="myToken" value="{{ token_row.token }}" readonly style="font-size:12px;flex:1">
+      <button type="button" class="btn btn-ghost" onclick="copyToken()">复制</button>
+    </div>
+    <div class="muted small mt">创建于 {{ token_row.created_at|ctime }} · 最近使用 {% if token_row.last_used_at %}{{ token_row.last_used_at|ctime }}{% else %}从未{% endif %}</div>
+    <form method="post" class="mt" onsubmit="return confirm('确定重置 Token？\\n旧 Token 将立即失效，所有调用需改用新 Token！');">
+      <input type="hidden" name="action" value="reset_token">
+      <button class="btn btn-warn">重置 Token</button>
+    </form>
+    {% else %}
+    <p class="muted">尚未生成 Token。</p>
+    <form method="post">
+      <input type="hidden" name="action" value="reset_token">
+      <button>生成 Token</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="max-width:560px">
+  <h3 style="margin:0 0 6px">修改密码</h3>
+  <form method="post">
+    <input type="hidden" name="action" value="change_password">
+    <label>原密码</label>
+    <input name="old_password" type="password" required>
+    <div class="row">
+      <div style="flex:1">
+        <label>新密码（至少 6 位）</label>
+        <input name="new_password" type="password" required minlength="6">
+      </div>
+      <div style="flex:1">
+        <label>确认新密码</label>
+        <input name="confirm" type="password" required minlength="6">
+      </div>
+    </div>
+    <div class="row mt"><button>修改密码</button></div>
+  </form>
+</div>
+
+<script>
+function copyToken(){
+  var t=document.getElementById('myToken');
+  t.select(); t.setSelectionRange(0, 99999);
+  if(navigator.clipboard){ navigator.clipboard.writeText(t.value).then(function(){flash('Token 已复制');}); }
+  else{ document.execCommand('copy'); flash('Token 已复制'); }
+}
+function flash(msg){
+  var d=document.createElement('div'); d.className='alert alert-success';
+  d.textContent=msg;
+  var c=document.querySelector('.content'); c.insertBefore(d, c.firstChild);
+  setTimeout(function(){d.remove();}, 2500);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% if current_user %}
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">{{ APP_NAME }}</div>
+    <div class="brand-sub">{{ APP_DESC }}</div>
+    <nav>
+      <a href="{{ url_for('web.dashboard') }}" class="{% if active=='dashboard' %}on{% endif %}">仪表盘</a>
+      <a href="{{ url_for('web.profile') }}" class="{% if active=='profile' %}on{% endif %}">个人信息</a>
+      <a href="{{ url_for('web.usage') }}" class="{% if active=='usage' %}on{% endif %}">使用情况</a>
+      <a href="{{ url_for('web.transactions') }}" class="{% if active=='transactions' %}on{% endif %}">积分流水</a>
+      <a href="{{ url_for('web.recharge') }}" class="{% if active=='recharge' %}on{% endif %}">积分 / 兑换</a>
+      <a href="{{ url_for('web.docs') }}" class="{% if active=='docs' %}on{% endif %}">使用文档</a>
+      {% if current_user.role == 'admin' %}
+      <div class="nav-sep">管理</div>
+      <a href="{{ url_for('admin.overview') }}">后台总览</a>
+      <a href="{{ url_for('admin.users') }}">用户管理</a>
+      <a href="{{ url_for('admin.pricing') }}">定价管理</a>
+      <a href="{{ url_for('admin.usage') }}">全局用量</a>
+      <a href="{{ url_for('admin.redeem') }}">兑换码</a>
+      {% endif %}
+    </nav>
+    <div class="side-foot">
+      <div class="u">{{ current_user.username }}{% if current_user.role=='admin' %} <span class="tag">admin</span>{% endif %}</div>
+      <div class="c">积分: <b>{{ current_user.credits }}</b></div>
+      <a class="btn btn-ghost btn-sm logout-btn" href="{{ url_for('web.logout') }}">退出登录</a>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><h1>{% block h1 %}{{ self.title() }}{% endblock %}</h1></div>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}<div class="alert alert-{{cat}}">{{msg}}</div>{% endfor %}
+    {% endwith %}
+    <div class="content">{{ self.content() }}</div>
+  </main>
+</div>
+{% else %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="brand center">{{ APP_NAME }}</div>
+    <div class="brand-sub center">{{ APP_DESC }}</div>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}<div class="alert alert-{{cat}}">{{msg}}</div>{% endfor %}
+    {% endwith %}
+    {{ self.content() }}
+  </div>
+</div>
+{% endif %}
+</body>
+</html>

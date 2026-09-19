@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% set active='redeem' %}
+{% block content %}
+
+<div class="card" style="max-width:600px">
+  <h3 style="margin:0 0 6px">生成兑换码</h3>
+  <p class="muted small">生成的兑换码发给客户，客户在「积分 / 兑换」页输入即可到账。一个兑换码只能使用一次。</p>
+  <form method="post" class="row">
+    <input name="points" type="number" placeholder="每个兑换码积分" style="max-width:150px" required>
+    <input name="count" type="number" placeholder="数量" style="max-width:80px" value="1" min="1" required>
+    <input name="note" placeholder="备注（如：客户A/活动赠送）" style="max-width:220px">
+    <button>生成</button>
+  </form>
+</div>
+
+{% if codes %}
+<div class="card">
+  <h3 style="margin:0 0 6px">本次生成的兑换码（每个 {{ points }} 积分）</h3>
+  <div class="row" style="align-items:flex-start">
+    {% for c in codes %}
+    <div class="row" style="gap:6px;flex-wrap:nowrap;margin-bottom:4px">
+      <code class="mono" id="code-{{ loop.index }}">{{ c }}</code>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="copyCode('code-{{ loop.index }}', this)">复制</button>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small">请妥善保存，兑换码一旦被使用即失效。</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+    <h3 style="margin:0">兑换码管理 <span class="muted small" style="font-weight:400">（共 {{ total }} 条）</span></h3>
+    <form method="get" class="row" style="gap:8px;margin:0;flex-wrap:nowrap;align-items:center">
+      <input name="keyword" value="{{ keyword }}" placeholder="搜索兑换码 / 备注 / 用户"
+             style="width:220px" onkeydown="if(event.key==='Enter'){event.preventDefault();this.form.submit();}">
+      <select name="status" onchange="this.form.submit()" style="width:120px">
+        <option value="">全部状态</option>
+        <option value="unused" {% if status=='unused' %}selected{% endif %}>未使用</option>
+        <option value="used" {% if status=='used' %}selected{% endif %}>已使用</option>
+      </select>
+      <select name="used_by" onchange="this.form.submit()" style="width:130px">
+        <option value="">全部用户</option>
+        {% for uid, name in users.items() %}
+        <option value="{{ uid }}" {% if used_by|string == uid|string %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      {% if keyword or status or used_by %}<a class="btn btn-ghost btn-sm" href="{{ url_for('admin.redeem') }}">清除</a>{% endif %}
+    </form>
+  </div>
+
+  {% if rows %}
+  <form method="post" id="batchForm" onsubmit="return confirm('确定删除选中的兑换码？此操作不可恢复！');">
+    <input type="hidden" name="action" value="batch_delete">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="hidden" name="used_by" value="{{ used_by }}">
+    <input type="hidden" name="keyword" value="{{ keyword }}">
+    <input type="hidden" name="page" value="{{ page }}">
+    <table>
+      <tr>
+        <th style="width:30px"><input type="checkbox" id="selectAll" style="width:auto" onchange="toggleAll(this)"></th>
+        <th>兑换码</th><th>积分</th><th>备注</th><th>状态</th><th>创建者</th><th>创建时间</th><th>使用者</th><th>使用时间</th>
+      </tr>
+      {% for r in rows %}
+      <tr>
+        <td><input type="checkbox" name="codes" value="{{ r.code }}" class="row-check" style="width:auto"></td>
+        <td class="mono">{{ r.code }}</td>
+        <td>{{ r.points }}</td>
+        <td class="muted">{{ r.note or '—' }}</td>
+        <td>{% if r.used_by %}<span class="pill pill-off">已使用</span>{% else %}<span class="pill pill-on">未使用</span>{% endif %}</td>
+        <td class="muted">{{ r.created_by_name or '—' }}</td>
+        <td class="muted">{{ r.created_at|ctime }}</td>
+        <td>{% if r.used_by %}<b>{{ r.used_by_name or '#' ~ r.used_by }}</b>{% else %}—{% endif %}</td>
+        <td class="muted">{% if r.used_at %}{{ r.used_at|ctime }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="row mt" style="justify-content:space-between">
+      <span class="muted small" id="selCount">已选 0 个</span>
+      <button class="btn btn-danger btn-sm">批量删除选中</button>
+    </div>
+  </form>
+
+  {% if pages > 1 %}
+  <div class="row mt">
+    {% if page>1 %}<a class="btn btn-ghost btn-sm" href="?keyword={{ keyword }}&status={{ status }}&used_by={{ used_by }}&page={{ page-1 }}">上一页</a>{% endif %}
+    <span class="muted small">第 {{ page }} / {{ pages }} 页</span>
+    {% if page<pages %}<a class="btn btn-ghost btn-sm" href="?keyword={{ keyword }}&status={{ status }}&used_by={{ used_by }}&page={{ page+1 }}">下一页</a>{% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="empty">暂无兑换码记录{% if status or used_by %}（当前筛选无结果）{% endif %}</p>
+  {% endif %}
+</div>
+
+<script>
+function toggleAll(el){
+  document.querySelectorAll('.row-check').forEach(function(c){ c.checked = el.checked; });
+  updateCount();
+}
+function updateCount(){
+  var n = document.querySelectorAll('.row-check:checked').length;
+  document.getElementById('selCount').textContent = '已选 ' + n + ' 个';
+}
+document.querySelectorAll('.row-check').forEach(function(c){ c.addEventListener('change', updateCount); });
+function copyCode(id, btn){
+  var t = document.getElementById(id).innerText;
+  if(navigator.clipboard){ navigator.clipboard.writeText(t); }
+  btn.textContent='已复制'; setTimeout(function(){btn.textContent='复制';},1200);
+}
+</script>
+{% endblock %}

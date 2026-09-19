@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}登录 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="auth-logo">◈</div>
+<div class="brand center">{{ APP_NAME }}</div>
+<div class="brand-sub center">验证码打码 / 绕过 SaaS 服务平台</div>
+
+<form method="post">
+  <label>用户名</label>
+  <input name="username" placeholder="请输入用户名" autofocus required>
+
+  <label>密码</label>
+  <input name="password" type="password" placeholder="请输入密码" required>
+
+  <button type="submit">登 录</button>
+</form>
+
+<div class="auth-footer">
+  还没有账号？<a href="{{ url_for('web.register') }}">立即注册</a>
+</div>
+{% endblock %}
