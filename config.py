@@ -27,12 +27,11 @@ APP_DESC = "验证码打码 / 绕过 SaaS 服务平台"
 DEFAULT_PRICING = {
     "huya_v3": {"points": 10, "enabled": 1, "note": "虎牙 V3 验证码绕过（解验证码 + 发短信）"},
     "tencent_tcaptcha": {"points": 15, "enabled": 1, "note": "腾讯 TCaptcha 多类型自动分类"},
-    "yidun": {"points": 15, "enabled": 1, "note": "网易易盾滑块（纯协议，返回 validate 令牌）"},
-    "geetest4": {"points": 10, "enabled": 1, "note": "极验4 risk_type=ai 一键通过（纯协议，返回 seccode）"},
-    "aliyun_captcha": {"points": 20, "enabled": 1, "note": "阿里云 Captcha 2.0 V2 滑块（纯协议，返回 captchaVerifyParam）"},
-    "shumei": {"points": 25, "enabled": 1, "note": "数美智能验证码（空间推理/文字点选/图标点选，mode 参数切换）"},
-    "geetestV4": {"points": 20, "enabled": 1, "note": "极验4代打码（自动识别类型，返回 captcha_output/pass_token）"},
-    "geetestV3": {"points": 15, "enabled": 1, "note": "极验3代打码（返回 validate/seccode）"},
+    "yidun": {"points": 15, "enabled": 1, "note": "网易易盾滑块（纯协议，传 captcha_id，返回 validate）"},
+    "aliyun_captcha": {"points": 20, "enabled": 1, "note": "阿里云 Captcha 2.0（传 captcha_id+scene+certify_id，返回 captchaVerifyParam）"},
+    "shumei": {"points": 25, "enabled": 1, "note": "数美智能验证码（传 organization，mode：spatial_select ✅/select ✅/icon_select、slide 实验/seq_select 需 VLM）"},
+    "geetestV4": {"points": 20, "enabled": 1, "note": "极验4（传 captcha_id；riskType 支持 ai 无感 ✅、slide 滑块 ✅、match/voice/winlinze、auto 自动探测；返回 pass_token/captcha_output 或 seccode）"},
+    "geetestV3": {"points": 15, "enabled": 1, "note": "极验3（传 gt+challenge；支持 slide 滑块、click 点选等；返回 validate/seccode）"},
     "google": {"points": 15, "enabled": 0, "note": "Google reCAPTCHA（规划中）"},
     "cf": {"points": 30, "enabled": 0, "note": "Cloudflare Turnstile（规划中）"},
 }

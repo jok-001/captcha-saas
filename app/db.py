@@ -132,10 +132,17 @@ def seed():
         if not cur.fetchone():
             cur.execute("INSERT INTO pricing(type,points,enabled,note) VALUES(?,?,?,?)",
                         (t, v["points"], v["enabled"], v["note"]))
-    # 迁移：曾标记"规划中"但已实际交付的类型，升级为正式启用（2026-10-25 四平台接入）
+    # 迁移 1：曾标记"规划中"但已实际交付的类型，升级为正式启用（2026-10-25 四平台接入）
     cur.execute(
         "UPDATE pricing SET enabled=1, note=? WHERE type=? AND note LIKE '%规划中%'",
         ("数美智能验证码（空间推理/文字点选/图标点选，mode 参数切换）", "shumei"))
+    # 迁移 2：同步已存在类型的说明文案（管理员在后台改过的单价/启停保持不变）
+    for t, v in config.DEFAULT_PRICING.items():
+        cur.execute("UPDATE pricing SET note=? WHERE type=?", (v["note"], t))
+    # 迁移 3：geetest4 已并入 geetestV4（同一极验4，只是内部按题型分派），
+    #         历史用量/流水一并归并，避免管理后台出现查无此类型的孤儿记录
+    cur.execute("UPDATE usage_logs SET type='geetestV4' WHERE type='geetest4'")
+    cur.execute("DELETE FROM pricing WHERE type IN ('geetest4', 'geetest')")
     # 管理员初始积分流水（新建或历史库一次性补记）
     admin_row = cur.execute("SELECT id,credits FROM users WHERE username=?",
                             (config.INIT_ADMIN_USERNAME,)).fetchone()

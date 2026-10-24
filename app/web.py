@@ -196,7 +196,9 @@ _GEETEST_DOCS = {'geetestV4': {'title': '极验4代打码（自动识别类型�
                            'type': 'string',
                            'required': False,
                            'default': 'auto',
-                           'desc': 'auto=自动探测类型并求解（推荐）；也可显式传 slide/word/...'},
+                           'desc': '题型：ai=无感一键通过 ✅（纯协议通道，约 0.3s）；slide=滑块 '
+                                   '✅；match/voice/winlinze 支持；word 实验性；'
+                                   'icon/svg/nine 等已知不可用。auto=自动探测（推荐）'},
                           {'name': 'proxy',
                            'type': 'string',
                            'required': False,
@@ -509,73 +511,32 @@ DOCS_REGISTRY.update({
             {"name": "result.data.elapsed_s", "type": "float", "desc": "解题耗时（秒）"},
         ],
     },
-    "geetest4": {
-        "title": "极验4 risk_type=ai 一键通过（纯协议）",
-        "endpoints": [
-            {"path": "/api/v1/solve", "desc": "通用入口（type=geetest4）"},
-        ],
-        "params": [
-            {"name": "captcha_id", "type": "string", "required": False, "default": "官方体验页 ID", "desc": "极验4 captchaId（32 位十六进制，如 <code>24f2e1a0b3c4d5e6f7a8b9c0d1e2f3a4</code>）；不传则使用官方体验页 ID"},
-            {"name": "max_retries", "type": "int", "required": False, "default": "2", "desc": "识别失败最大重试次数"},
-            {"name": "proxy", "type": "string", "required": False, "default": "—", "desc": "HTTP 代理"},
-        ],
-        "examples": [
-            {
-                "lang": "Python (requests)",
-                "note": "通用入口",
-                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "geetest4",\n           "param": {{"captcha_id": "你的captchaId", "risk_type": "ai"}}}})\nprint(r.json())'
-            },
-            {
-                "lang": "curl",
-                "note": "命令行调用",
-                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"geetest4","param":{{"captcha_id":"你的captchaId"}}}}\''
-            },
-        ],
-        "response_example": '''{
-  "success": true,
-  "type": "geetest4",
-  "credits_spent": 10,
-  "credits_left": 990,
-  "result": {
-    "success": true,
-    "message": "ok",
-    "data": {
-      "token": "{...seccode...}",
-      "lot_number": "...",
-      "result": "success",
-      "attempt": 1,
-      "elapsed_s": 1.35
-    }
-  }
-}''',
-        "response_fields": [
-            {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面）"},
-            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 seccode / pass_token（提交给业务后端）"},
-            {"name": "result.data.lot_number", "type": "string", "desc": "本次验证流水号（与 seccode 配对使用）"},
-            {"name": "result.data.result", "type": "string", "desc": "极验接口返回的验证结论"},
-            {"name": "result.data.attempt", "type": "int", "desc": "第几次尝试成功"},
-        ],
-    },
     "aliyun_captcha": {
-        "title": "阿里云 Captcha 2.0 滑块打码（纯协议）",
+        "title": "阿里云 Captcha 2.0 打码（底层，只解验证码）",
         "endpoints": [
             {"path": "/api/v1/solve", "desc": "通用入口（type=aliyun_captcha）"},
         ],
         "params": [
-            {"name": "keyword", "type": "string", "required": False, "default": "java", "desc": "触发验证码的业务搜索关键词（驱动业务腿流程）"},
+            {"name": "captcha_id", "type": "string", "required": True, "default": "—", "desc": "阿里云 CaptchaId（32 位十六进制，控制台里的「验证码 ID」，如 <code>93bc86fc5f88a01515ccdf7ea6192e9f</code>）"},
+            {"name": "scene", "type": "string", "required": True, "default": "—", "desc": "场景标识 SceneId（如 <code>19x5u7lo</code>）"},
+            {"name": "certify_id", "type": "string", "required": True, "default": "—", "desc": "业务方下发的流水号（UserCertifyId / traceid）。<b>必须从你自己的站点获取后传入</b>：留空或自造时服务端只会原样回显，凭证不可用"},
+            {"name": "region", "type": "string", "required": False, "default": "cn", "desc": "区域，默认 cn"},
+            {"name": "user_id", "type": "string", "required": False, "default": "—", "desc": "业务用户标识（站点有下发就传，可留空）"},
+            {"name": "user_user_id", "type": "string", "required": False, "default": "—", "desc": "业务用户子标识（可留空）"},
+            {"name": "page_url", "type": "string", "required": False, "default": "—", "desc": "触发验证的页面 URL（影响 Referer 与指纹上下文）"},
             {"name": "max_retries", "type": "int", "required": False, "default": "2", "desc": "识别失败最大重试次数"},
             {"name": "proxy", "type": "string", "required": False, "default": "—", "desc": "HTTP 代理"},
         ],
         "examples": [
             {
                 "lang": "Python (requests)",
-                "note": "通用入口",
-                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "aliyun_captcha",\n           "param": {{"keyword": "java"}}}})\nprint(r.json())'
+                "note": "只传验证码参数，不含任何业务字段",
+                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "aliyun_captcha",\n           "param": {{"captcha_id": "你的CaptchaId",\n                    "scene": "你的SceneId",\n                    "certify_id": "站点下发的traceid"}}}})\nprint(r.json())'
             },
             {
                 "lang": "curl",
                 "note": "命令行调用",
-                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"aliyun_captcha","param":{{"keyword":"java"}}}}\''
+                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"aliyun_captcha","param":{{"captcha_id":"你的CaptchaId","scene":"你的SceneId","certify_id":"站点下发的traceid"}}}}\''
             },
         ],
         "response_example": '''{
@@ -587,19 +548,22 @@ DOCS_REGISTRY.update({
     "success": true,
     "message": "ok",
     "data": {
-      "token": "....captchaVerifyParam....",
-      "keyword": "java",
-      "stage": "done",
-      "total": 128
+      "token": "ac11000117928652477164252e00a5",
+      "captcha_id": "93bc86fc5f88a01515ccdf7ea6192e9f",
+      "scene": "19x5u7lo",
+      "certify_id": "ac110001179286524771",
+      "attempt": 1,
+      "elapsed_s": 8.7
     }
   }
 }''',
         "response_fields": [
             {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面）"},
-            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 captchaVerifyParam（提交给业务后端）"},
-            {"name": "result.data.keyword", "type": "string", "desc": "本次使用的业务关键词"},
-            {"name": "result.data.stage", "type": "string", "desc": "业务腿结束阶段"},
-            {"name": "result.data.total", "type": "int", "desc": "业务接口返回的数据总量（佐证请求已通过验证）"},
+            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 captchaVerifyParam（提交给你自己的业务后端）"},
+            {"name": "result.data.captcha_id", "type": "string", "desc": "本次使用的 CaptchaId"},
+            {"name": "result.data.scene", "type": "string", "desc": "本次使用的场景 SceneId"},
+            {"name": "result.data.certify_id", "type": "string", "desc": "本次使用的业务流水号"},
+            {"name": "result.data.elapsed_s", "type": "float", "desc": "解题耗时（秒）"},
         ],
     },
     "shumei": {

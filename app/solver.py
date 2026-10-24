@@ -95,10 +95,35 @@ def _solve_tencent(param, proxy=None, solve_only=False):
     )
 
 
-# ── 极验 GeeTest（算法在 /data/jiyan，本文件只做参数转换） ──
+# ── 极验4（对外只有一个 geetestV4，内部按题型分派两条通道）──
+#
+# 为什么分两条通道（实测结论，2026-10-25）：
+#   · risk_type=ai（无感一键通过）→ 纯协议通道，0.3s 出 seccode/pass_token；
+#     算法仓 /data/jiyan 的 ai 分支当前有缺陷（OpenCV imdecode 空 buffer），实测失败。
+#   · 其余题型（slide/match/voice/winlinze，含 auto 自动探测）→ /data/jiyan 算法仓，实测通过。
+# 两条通道能力互补，合并后对外仍是一个类型、一套参数。
+_GEETEST4_PURE_AI_TYPES = {"ai"}
+
+
 @_register("geetestV4", "geetest_v4")
 def _solve_geetest_v4(param, proxy=None, solve_only=False):
-    """param: {captcha_id?, riskType?, proxy?, timeout?} — 自动识别滑块/点选等类型"""
+    """param: {captcha_id?, riskType?(auto/slide/ai/match/voice/winlinze), proxy?, timeout?}"""
+    if not isinstance(param, dict):
+        raise SolverError("param 必须是 dict")
+    risk = str(param.get("riskType") or param.get("risk_type") or "auto").strip().lower()
+    if risk in _GEETEST4_PURE_AI_TYPES:
+        from solvers.geetest4.geetest4 import run as _pure_run
+        r = _pure_run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+        # 纯协议通道只覆盖 ai；一旦 ai 通道失败，回落到算法仓再试一次
+        if isinstance(r, dict) and r.get("success"):
+            r.setdefault("data", {})
+            r["solver"] = "geetest4-pure(ai)"
+            return r
+        from solvers.geetest.geetest_v4 import GeeTestV4
+        fb = GeeTestV4.run(param, proxy=proxy, solve_only=solve_only)
+        if isinstance(fb, dict):
+            fb.setdefault("message", "ai 通道失败，已回落算法仓")
+        return fb
     from solvers.geetest.geetest_v4 import GeeTestV4
     return GeeTestV4.run(param, proxy=proxy, solve_only=solve_only)
 
@@ -120,24 +145,17 @@ def _solve_yidun(param, proxy=None, solve_only=False):
     return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
 
 
-# ── 极验4（risk_type=ai 一键通过，project_api 纯协议）──
-@_register("geetest4", "gt4")
-def _solve_geetest4(param, proxy=None, solve_only=False):
-    """param: {captcha_id?, max_retries?, proxy?}"""
-    if not isinstance(param, dict):
-        raise SolverError("param 必须是 dict")
-    from solvers.geetest4.geetest4 import run
-    return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
-
-
-# ── 阿里云 Captcha 2.0（V2 SLIDING 滑块）──────────────
-@_register("aliyun_captcha", "aliyun", "aliyun51job")
+# ── 阿里云 Captcha 2.0（底层打码：给验证码参数 → 出 captchaVerifyParam）──
+@_register("aliyun_captcha", "aliyun")
 def _solve_aliyun(param, proxy=None, solve_only=False):
-    """param: {keyword?, max_retries?, proxy?}"""
+    """param: {captcha_id, scene, certify_id, region?, user_id?, user_user_id?, page_url?}"""
     if not isinstance(param, dict):
         raise SolverError("param 必须是 dict")
     from solvers.aliyun.aliyun import run
-    return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+    try:
+        return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+    except ValueError as e:      # 缺必填参数 → 400 而不是 500
+        raise SolverError(str(e))
 
 
 # ── 数美智能验证码 ────────────────────────────────────

@@ -112,15 +112,30 @@ class MySolver:
 |---|---|---|---|---|---|
 | `huya_v3` | 虎牙 V3 | 10 | 纯协议 | `session_data/guid/sdid` 令牌 | 完整流程可发短信 |
 | `tencent_tcaptcha` | 腾讯 TCaptcha | 15 | 纯协议 | `ticket` + `randstr` | 多类型自动分类 |
-| `yidun` | 网易易盾滑块 | 15 | 纯协议 + Node SDK | `validate` 令牌 | 支持业务 captcha_id/referer/width |
-| `geetest4` | 极验4 | 10 | 纯协议 | `seccode` + `lot_number` | 仅 risk_type=ai 一键通过 |
-| `aliyun_captcha` | 阿里云 Captcha 2.0 | 20 | curl_cffi + jsdom 沙箱 | `captchaVerifyParam` | V2 SLIDING 滑块，单发约 12s |
-| `shumei` | 数美智能验证码 | 25 | jsdom 补环境 | `rid` | `mode` 参数：spatial_select ✅ / select ✅ / icon_select、slide（实验，通过率不稳定）/ seq_select（需配 VLM） |
-| `geetestV4` | 极验4（代打码） | 20 | 算法仓 `/data/jiyan` | `captcha_output` / `pass_token` | 自动识别滑块/点选等类型 |
-| `geetestV3` | 极验3（代打码） | 15 | 算法仓 `/data/jiyan` | `validate` / `seccode` | 需传 `gt` + `challenge` |
+| `yidun` | 网易易盾滑块 | 15 | 纯协议 + Node SDK | `validate` | 传 `captcha_id`（业务 ID），可选 `referer`/`width` |
+| `aliyun_captcha` | 阿里云 Captcha 2.0 | 20 | jsdom 跑真实 SDK | `captchaVerifyParam` | **底层打码**：传 `captcha_id` + `scene` + `certify_id`，约 8~10s |
+| `shumei` | 数美智能验证码 | 25 | jsdom 补环境 | `rid` | 传 `organization`；`mode`：spatial_select ✅ / select ✅ / icon_select、slide（实验）/ seq_select（需配 VLM） |
+| `geetestV4`（别名 `geetest4`/`gt4`） | 极验4 | 20 | 双通道 | `pass_token`+`captcha_output`（滑块）/ `seccode`（ai） | 传 `captcha_id`；`riskType`：`ai` 无感 ✅、`slide` 滑块 ✅、`match`/`voice`/`winlinze`、`auto` 自动探测 |
+| `geetestV3` | 极验3 | 15 | 算法仓 `/data/jiyan` | `validate` / `seccode` | 传 `gt` + `challenge`；支持 slide 滑块、click 点选等 |
 
 统一入口：`POST /api/v1/solve`，body 为 `{"type": "...", "param": {...}, "solve_only": false}`。
 详细参数与响应字段见 `/docs/<type>` 页面。
+
+> **接口设计原则：只做验证码本身，不碰业务层。**
+> 每个类型接收的都是「验证码参数」（业务 ID / 场景 / 流水号），返回的都是「通行凭证」，
+> 由调用方拿去提交给自己的业务后端。适配器内部不会去访问、重放任何业务接口
+> （例如不会替你去搜索、下单、登录）。
+
+### 极验4 为什么内部有两条通道
+同一 captcha_id 下的对照实测（2026-10-25，`54088bb07d2df3c46b79f80300b0abbe`）：
+
+| 通道 | `riskType=ai` | `riskType=auto`/`slide` |
+|---|---|---|
+| 纯协议（快速通道） | ✅ 0.3s 出 seccode | — |
+| 算法仓 `/data/jiyan` | ❌ `OpenCV imdecode !buf.empty()`（ai 分支缺陷） | ✅ 出 pass_token |
+
+两者能力互补，因此在 `geetestV4` 内部按 `riskType` 自动分派，对外仍是一个类型、一套参数；
+`ai` 通道失败会自动回落算法仓重试。`geetest4` 作为别名保留，与 `geetestV4` 完全等价。
 
 ---
 
