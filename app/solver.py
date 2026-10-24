@@ -95,6 +95,64 @@ def _solve_tencent(param, proxy=None, solve_only=False):
     )
 
 
+# ── 极验 GeeTest（算法在 /data/jiyan，本文件只做参数转换） ──
+@_register("geetestV4", "geetest_v4")
+def _solve_geetest_v4(param, proxy=None, solve_only=False):
+    """param: {captcha_id?, riskType?, proxy?, timeout?} — 自动识别滑块/点选等类型"""
+    from solvers.geetest.geetest_v4 import GeeTestV4
+    return GeeTestV4.run(param, proxy=proxy, solve_only=solve_only)
+
+
+@_register("geetestV3", "geetest_v3", "geetest3")
+def _solve_geetest_v3(param, proxy=None, solve_only=False):
+    """param: {gt, challenge, target?, cookies?, proxy?, timeout?} — 服务端自动分派类型"""
+    from solvers.geetest.geetest_v3 import GeeTestV3
+    return GeeTestV3.run(param, proxy=proxy, solve_only=solve_only)
+
+
+# ── 网易易盾滑块 ─────────────────────────────────────
+@_register("yidun", "netease_yidun", "dun163")
+def _solve_yidun(param, proxy=None, solve_only=False):
+    """param: {captcha_id?, referer?, width?, max_retries?, proxy?}"""
+    if not isinstance(param, dict):
+        raise SolverError("param 必须是 dict")
+    from solvers.yidun.yidun import run
+    return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+
+
+# ── 极验4（risk_type=ai 一键通过，project_api 纯协议）──
+@_register("geetest4", "gt4")
+def _solve_geetest4(param, proxy=None, solve_only=False):
+    """param: {captcha_id?, max_retries?, proxy?}"""
+    if not isinstance(param, dict):
+        raise SolverError("param 必须是 dict")
+    from solvers.geetest4.geetest4 import run
+    return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+
+
+# ── 阿里云 Captcha 2.0（V2 SLIDING 滑块）──────────────
+@_register("aliyun_captcha", "aliyun", "aliyun51job")
+def _solve_aliyun(param, proxy=None, solve_only=False):
+    """param: {keyword?, max_retries?, proxy?}"""
+    if not isinstance(param, dict):
+        raise SolverError("param 必须是 dict")
+    from solvers.aliyun.aliyun import run
+    return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+
+
+# ── 数美智能验证码 ────────────────────────────────────
+@_register("shumei")
+def _solve_shumei(param, proxy=None, solve_only=False):
+    """param: {mode?, max_retries?, proxy?}
+
+    mode: spatial_select(默认) / select / icon_select / slide / seq_select
+    """
+    if not isinstance(param, dict):
+        raise SolverError("param 必须是 dict")
+    from solvers.shumei.shumei import run
+    return run(param, proxy=proxy or param.get("proxy"), solve_only=solve_only)
+
+
 # ── 统一入口 ─────────────────────────────────────────
 def dispatch(type_name, param, proxy=None, solve_only=False):
     """统一分发入口。返回 solver 原始结果 dict。"""

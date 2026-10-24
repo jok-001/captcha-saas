@@ -185,6 +185,138 @@ def docs():
 
 
 # ---------- 各类型接口文档注册表 ----------
+_GEETEST_DOCS = {'geetestV4': {'title': '极验4代打码（自动识别类型）',
+               'endpoints': [{'path': '/api/v1/solve', 'desc': '通用打码入口，type 传 geetestV4'}],
+               'params': [{'name': 'captcha_id',
+                           'type': 'string',
+                           'required': False,
+                           'default': '极验官方demo',
+                           'desc': '极验4代 captcha_id（目标站点的公开标识）'},
+                          {'name': 'riskType',
+                           'type': 'string',
+                           'required': False,
+                           'default': 'auto',
+                           'desc': 'auto=自动探测类型并求解（推荐）；也可显式传 slide/word/...'},
+                          {'name': 'proxy',
+                           'type': 'string',
+                           'required': False,
+                           'default': '—',
+                           'desc': '本次调用专用 HTTP 代理，如 http://user:pass@ip:port（机房 IP '
+                                   '直连易被极验风控，建议传住宅代理）'},
+                          {'name': 'timeout',
+                           'type': 'int',
+                           'required': False,
+                           'default': '240',
+                           'desc': '单次求解超时秒数'}],
+               'examples': [{'lang': 'curl',
+                             'note': '自动识别类型并求解（推荐）',
+                             'code': 'curl -X POST {api_base}/api/v1/solve \\\n'
+                                     '  -H "X-API-Key: 你的TOKEN" \\\n'
+                                     '  -H "Content-Type: application/json" \\\n'
+                                     '  -d '
+                                     '\'{"type":"geetestV4","param":{"captcha_id":"54088bb07d2df3c46b79f80300b0abbe"}}\''},
+                            {'lang': 'Python (requests)',
+                             'note': '带代理调用（机房 IP 建议传住宅代理）',
+                             'code': 'import requests\n'
+                                     '\n'
+                                     'r = requests.post("{api_base}/api/v1/solve",\n'
+                                     '    headers={"X-API-Key": "你的TOKEN"},\n'
+                                     '    json={"type": "geetestV4",\n'
+                                     '          "param": {"captcha_id": '
+                                     '"54088bb07d2df3c46b79f80300b0abbe",\n'
+                                     '                    "proxy": "http://user:pass@ip:port"}})\n'
+                                     'print(r.json())'}],
+               'response_example': '{\n'
+                                   '  "success": true,\n'
+                                   '  "type": "geetestV4",\n'
+                                   '  "credits_spent": 20,\n'
+                                   '  "result": {\n'
+                                   '    "success": true,\n'
+                                   '    "message": "验证码已通过",\n'
+                                   '    "captcha_type": "slide",\n'
+                                   '    "data": {\n'
+                                   '      "captcha_id": "54088bb07d2df3c46b79f80300b0abbe",\n'
+                                   '      "lot_number": "...",\n'
+                                   '      "pass_token": "...",\n'
+                                   '      "gen_time": "...",\n'
+                                   '      "captcha_output": "..."\n'
+                                   '    }\n'
+                                   '  }\n'
+                                   '}',
+               'response_fields': [{'name': 'success', 'desc': '是否解码成功'},
+                                   {'name': 'captcha_type', 'desc': '实际求解的验证类型（slide/word/...）'},
+                                   {'name': 'data.captcha_id', 'desc': 'captcha_id'},
+                                   {'name': 'data.lot_number', 'desc': '本次验证流水号'},
+                                   {'name': 'data.pass_token', 'desc': '验证通过令牌（二次校验用）'},
+                                   {'name': 'data.gen_time', 'desc': '令牌生成时间戳'},
+                                   {'name': 'data.captcha_output', 'desc': '核心验证凭证（提交给业务后端）'}]},
+ 'geetestV3': {'title': '极验3代打码（自动识别类型）',
+               'endpoints': [{'path': '/api/v1/solve', 'desc': '通用打码入口，type 传 geetestV3'}],
+               'params': [{'name': 'gt',
+                           'type': 'string',
+                           'required': 'demo免填',
+                           'default': '—',
+                           'desc': '极验3代 gt（站点分配）。target=demo 且不传 gt/challenge 时由官方 demo 自动注册'},
+                          {'name': 'challenge',
+                           'type': 'string',
+                           'required': '与gt成对',
+                           'default': '—',
+                           'desc': '极验3代 challenge（与 gt 成对传入）'},
+                          {'name': 'target',
+                           'type': 'string',
+                           'required': False,
+                           'default': 'demo',
+                           'desc': 'demo=官方demo（自动注册 gt/challenge）；douyu=斗鱼登录'},
+                          {'name': 'cookies',
+                           'type': 'object',
+                           'required': False,
+                           'default': '—',
+                           'desc': '斗鱼目标所需的登录 cookies'},
+                          {'name': 'proxy',
+                           'type': 'string',
+                           'required': False,
+                           'default': '—',
+                           'desc': '本次调用专用 HTTP 代理'},
+                          {'name': 'timeout',
+                           'type': 'int',
+                           'required': False,
+                           'default': '240',
+                           'desc': '单次求解超时秒数'}],
+               'examples': [{'lang': 'curl',
+                             'note': '官方 demo（自动注册 gt/challenge）',
+                             'code': 'curl -X POST {api_base}/api/v1/solve \\\n'
+                                     '  -H "X-API-Key: 你的TOKEN" \\\n'
+                                     '  -H "Content-Type: application/json" \\\n'
+                                     '  -d \'{"type":"geetestV3","param":{"target":"demo"}}\''},
+                            {'lang': 'curl',
+                             'note': '自有站点（自带 gt/challenge）',
+                             'code': 'curl -X POST {api_base}/api/v1/solve \\\n'
+                                     '  -H "X-API-Key: 你的TOKEN" \\\n'
+                                     '  -H "Content-Type: application/json" \\\n'
+                                     '  -d '
+                                     '\'{"type":"geetestV3","param":{"gt":"你的gt","challenge":"你的challenge"}}\''}],
+               'response_example': '{\n'
+                                   '  "success": true,\n'
+                                   '  "type": "geetestV3",\n'
+                                   '  "credits_spent": 15,\n'
+                                   '  "result": {\n'
+                                   '    "success": true,\n'
+                                   '    "message": "验证码已通过",\n'
+                                   '    "captcha_type": "slide",\n'
+                                   '    "data": {\n'
+                                   '      "challenge": "...",\n'
+                                   '      "validate": "...",\n'
+                                   '      "seccode": "...|jordan"\n'
+                                   '    }\n'
+                                   '  }\n'
+                                   '}',
+               'response_fields': [{'name': 'success', 'desc': '是否解码成功'},
+                                   {'name': 'captcha_type',
+                                    'desc': '实际求解的验证类型（slide/click/success）'},
+                                   {'name': 'data.challenge', 'desc': 'challenge（可能被服务端刷新）'},
+                                   {'name': 'data.validate', 'desc': '核心验证凭证（提交给业务后端）'},
+                                   {'name': 'data.seccode', 'desc': 'validate 的 seccode 形式'}]}}
+
 DOCS_REGISTRY = {
     "huya_v3": {
         "title": "虎牙 V3 验证码打码",
@@ -232,7 +364,8 @@ DOCS_REGISTRY = {
       "verify_response": { ... }
     }
   }
-}''',
+}
+''',
         "response_fields": [
             {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面，HTTP 200 不代表成功）"},
             {"name": "type", "type": "string", "desc": "调用的验证码类型"},
@@ -319,6 +452,203 @@ DOCS_REGISTRY = {
         ],
     },
 }
+
+# ── 极验 V3/V4（算法在 /data/jiyan，文档随定价表动态组装） ──────
+DOCS_REGISTRY.update(_GEETEST_DOCS)
+
+# ── 新增：易盾 / 极验4 / 阿里云 / 数美（纯协议打码） ────────────
+DOCS_REGISTRY.update({
+    "yidun": {
+        "title": "网易易盾滑块打码（纯协议）",
+        "endpoints": [
+            {"path": "/api/v1/solve", "desc": "通用入口（type=yidun）"},
+        ],
+        "params": [
+            {"name": "captcha_id", "type": "string", "required": False, "default": "官方体验页 ID", "desc": "易盾业务 captchaId（如 <code>6e2c5b8f1a9d4c3e8b7a6f5d4c3b2a19</code>）；不传则使用官方体验页 ID"},
+            {"name": "referer", "type": "string", "required": False, "default": "https://dun.163.com/trial/jigsaw", "desc": "触发验证的业务页面 URL"},
+            {"name": "width", "type": "int", "required": False, "default": "320", "desc": "滑块渲染宽度（px），影响轨迹与缺口计算"},
+            {"name": "max_retries", "type": "int", "required": False, "default": "2", "desc": "识别失败最大重试次数"},
+            {"name": "proxy", "type": "string", "required": False, "default": "—", "desc": "HTTP 代理，如 <code>http://user:pass@ip:port</code>"},
+        ],
+        "examples": [
+            {
+                "lang": "Python (requests)",
+                "note": "通用入口",
+                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "yidun",\n           "param": {{"captcha_id": "你的业务ID"}}}})\nprint(r.json())'
+            },
+            {
+                "lang": "curl",
+                "note": "命令行调用",
+                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"yidun","param":{{"captcha_id":"你的业务ID"}}}}\''
+            },
+        ],
+        "response_example": '''{
+  "success": true,
+  "type": "yidun",
+  "credits_spent": 15,
+  "credits_left": 985,
+  "result": {
+    "success": true,
+    "message": "ok",
+    "data": {
+      "token": "xxxxx.yyyyy.zzzzz",
+      "captcha_id": "6e2c5b8f...",
+      "attempt": 1,
+      "elapsed_s": 1.82
+    }
+  }
+}''',
+        "response_fields": [
+            {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面）"},
+            {"name": "type", "type": "string", "desc": "调用的验证码类型"},
+            {"name": "credits_spent", "type": "int", "desc": "本次成功消耗的积分"},
+            {"name": "credits_left", "type": "int", "desc": "扣除后账户剩余积分"},
+            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 validate（提交给业务后端）"},
+            {"name": "result.data.captcha_id", "type": "string", "desc": "实际使用的易盾业务 ID"},
+            {"name": "result.data.attempt", "type": "int", "desc": "第几次尝试成功"},
+            {"name": "result.data.elapsed_s", "type": "float", "desc": "解题耗时（秒）"},
+        ],
+    },
+    "geetest4": {
+        "title": "极验4 risk_type=ai 一键通过（纯协议）",
+        "endpoints": [
+            {"path": "/api/v1/solve", "desc": "通用入口（type=geetest4）"},
+        ],
+        "params": [
+            {"name": "captcha_id", "type": "string", "required": False, "default": "官方体验页 ID", "desc": "极验4 captchaId（32 位十六进制，如 <code>24f2e1a0b3c4d5e6f7a8b9c0d1e2f3a4</code>）；不传则使用官方体验页 ID"},
+            {"name": "max_retries", "type": "int", "required": False, "default": "2", "desc": "识别失败最大重试次数"},
+            {"name": "proxy", "type": "string", "required": False, "default": "—", "desc": "HTTP 代理"},
+        ],
+        "examples": [
+            {
+                "lang": "Python (requests)",
+                "note": "通用入口",
+                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "geetest4",\n           "param": {{"captcha_id": "你的captchaId", "risk_type": "ai"}}}})\nprint(r.json())'
+            },
+            {
+                "lang": "curl",
+                "note": "命令行调用",
+                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"geetest4","param":{{"captcha_id":"你的captchaId"}}}}\''
+            },
+        ],
+        "response_example": '''{
+  "success": true,
+  "type": "geetest4",
+  "credits_spent": 10,
+  "credits_left": 990,
+  "result": {
+    "success": true,
+    "message": "ok",
+    "data": {
+      "token": "{...seccode...}",
+      "lot_number": "...",
+      "result": "success",
+      "attempt": 1,
+      "elapsed_s": 1.35
+    }
+  }
+}''',
+        "response_fields": [
+            {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面）"},
+            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 seccode / pass_token（提交给业务后端）"},
+            {"name": "result.data.lot_number", "type": "string", "desc": "本次验证流水号（与 seccode 配对使用）"},
+            {"name": "result.data.result", "type": "string", "desc": "极验接口返回的验证结论"},
+            {"name": "result.data.attempt", "type": "int", "desc": "第几次尝试成功"},
+        ],
+    },
+    "aliyun_captcha": {
+        "title": "阿里云 Captcha 2.0 滑块打码（纯协议）",
+        "endpoints": [
+            {"path": "/api/v1/solve", "desc": "通用入口（type=aliyun_captcha）"},
+        ],
+        "params": [
+            {"name": "keyword", "type": "string", "required": False, "default": "java", "desc": "触发验证码的业务搜索关键词（驱动业务腿流程）"},
+            {"name": "max_retries", "type": "int", "required": False, "default": "2", "desc": "识别失败最大重试次数"},
+            {"name": "proxy", "type": "string", "required": False, "default": "—", "desc": "HTTP 代理"},
+        ],
+        "examples": [
+            {
+                "lang": "Python (requests)",
+                "note": "通用入口",
+                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "aliyun_captcha",\n           "param": {{"keyword": "java"}}}})\nprint(r.json())'
+            },
+            {
+                "lang": "curl",
+                "note": "命令行调用",
+                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"aliyun_captcha","param":{{"keyword":"java"}}}}\''
+            },
+        ],
+        "response_example": '''{
+  "success": true,
+  "type": "aliyun_captcha",
+  "credits_spent": 20,
+  "credits_left": 980,
+  "result": {
+    "success": true,
+    "message": "ok",
+    "data": {
+      "token": "....captchaVerifyParam....",
+      "keyword": "java",
+      "stage": "done",
+      "total": 128
+    }
+  }
+}''',
+        "response_fields": [
+            {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面）"},
+            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 captchaVerifyParam（提交给业务后端）"},
+            {"name": "result.data.keyword", "type": "string", "desc": "本次使用的业务关键词"},
+            {"name": "result.data.stage", "type": "string", "desc": "业务腿结束阶段"},
+            {"name": "result.data.total", "type": "int", "desc": "业务接口返回的数据总量（佐证请求已通过验证）"},
+        ],
+    },
+    "shumei": {
+        "title": "数美智能验证码打码（空间推理 / 文字点选 / 图标点选）",
+        "endpoints": [
+            {"path": "/api/v1/solve", "desc": "通用入口（type=shumei）"},
+        ],
+        "params": [
+            {"name": "mode", "type": "string", "required": False, "default": "spatial_select", "desc": "题目类型：<code>spatial_select</code> 空间推理 ✅ / <code>select</code> 文字点选 ✅ / <code>icon_select</code> 图标点选（实验） / <code>slide</code> 滑块（实验） / <code>seq_select</code> 语序点选（需配置 VLM）"},
+            {"name": "max_retries", "type": "int", "required": False, "default": "2", "desc": "识别失败最大重试次数"},
+            {"name": "proxy", "type": "string", "required": False, "default": "—", "desc": "HTTP 代理"},
+        ],
+        "examples": [
+            {
+                "lang": "Python (requests)",
+                "note": "通用入口（默认空间推理）",
+                "code": 'import requests\n\nr = requests.post("{api_base}/api/v1/solve",\n    headers={{"X-API-Key": "你的TOKEN"}},\n    json={{"type": "shumei",\n           "param": {{"mode": "spatial_select"}}}})\nprint(r.json())'
+            },
+            {
+                "lang": "curl",
+                "note": "命令行调用",
+                "code": 'curl -X POST {api_base}/api/v1/solve \\\n  -H "X-API-Key: 你的TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{{"type":"shumei","param":{{"mode":"spatial_select"}}}}\''
+            },
+        ],
+        "response_example": '''{
+  "success": true,
+  "type": "shumei",
+  "credits_spent": 25,
+  "credits_left": 975,
+  "result": {
+    "success": true,
+    "message": "ok",
+    "data": {
+      "token": "....rid....",
+      "mode": "spatial_select",
+      "riskLevel": "PASS",
+      "code": 1100
+    }
+  }
+}''',
+        "response_fields": [
+            {"name": "success", "type": "bool", "desc": "请求是否成功（业务层面）"},
+            {"name": "result.data.token", "type": "string", "desc": "核心验证凭证 rid（提交给业务后端做二次验证）"},
+            {"name": "result.data.mode", "type": "string", "desc": "本次实际解出的题目类型"},
+            {"name": "result.data.riskLevel", "type": "string", "desc": "数美返回的风险等级（PASS / REJECT 等）"},
+            {"name": "result.data.code", "type": "int", "desc": "数美返回码（1100 表示通过）"},
+        ],
+    },
+})
 
 
 def _build_doc(type_name, api_base):

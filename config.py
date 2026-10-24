@@ -27,10 +27,14 @@ APP_DESC = "验证码打码 / 绕过 SaaS 服务平台"
 DEFAULT_PRICING = {
     "huya_v3": {"points": 10, "enabled": 1, "note": "虎牙 V3 验证码绕过（解验证码 + 发短信）"},
     "tencent_tcaptcha": {"points": 15, "enabled": 1, "note": "腾讯 TCaptcha 多类型自动分类"},
-    "geetest": {"points": 20, "enabled": 0, "note": "极验 GeeTest（规划中）"},
+    "yidun": {"points": 15, "enabled": 1, "note": "网易易盾滑块（纯协议，返回 validate 令牌）"},
+    "geetest4": {"points": 10, "enabled": 1, "note": "极验4 risk_type=ai 一键通过（纯协议，返回 seccode）"},
+    "aliyun_captcha": {"points": 20, "enabled": 1, "note": "阿里云 Captcha 2.0 V2 滑块（纯协议，返回 captchaVerifyParam）"},
+    "shumei": {"points": 25, "enabled": 1, "note": "数美智能验证码（空间推理/文字点选/图标点选，mode 参数切换）"},
+    "geetestV4": {"points": 20, "enabled": 1, "note": "极验4代打码（自动识别类型，返回 captcha_output/pass_token）"},
+    "geetestV3": {"points": 15, "enabled": 1, "note": "极验3代打码（返回 validate/seccode）"},
     "google": {"points": 15, "enabled": 0, "note": "Google reCAPTCHA（规划中）"},
     "cf": {"points": 30, "enabled": 0, "note": "Cloudflare Turnstile（规划中）"},
-    "shumei": {"points": 25, "enabled": 0, "note": "数美（规划中）"},
 }
 
 API_BASE = os.environ.get("API_BASE", "http://localhost:9000")

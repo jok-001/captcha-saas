@@ -20,8 +20,13 @@ captcha_saas/
 ├── solvers/              ← 打码算法（gitignore，不上传）
 │   ├── huya/
 │   │   └── huya_v3.py    ← 虎牙 V3（导出 HuyaV3 类）
-│   └── tencent/
-│       └── tcaptcha.py   ← 腾讯 TCaptcha（导出 TencentTCaptcha 类）
+│   ├── tencent/
+│   │   └── tcaptcha.py   ← 腾讯 TCaptcha（导出 TencentTCaptcha 类）
+│   ├── yidun/            ← 网易易盾滑块
+│   ├── geetest4/         ← 极验4（risk_type=ai）
+│   ├── aliyun/           ← 阿里云 Captcha 2.0（V2 滑块）
+│   ├── shumei/           ← 数美智能验证码（多模式）
+│   └── _vendor/          ← 厂商资产（project_api providers + sites，不上传）
 ├── templates/            ← Jinja2 模板
 ├── static/               ← CSS/JS
 ├── data/saas.db          ← SQLite 数据库
@@ -52,8 +57,13 @@ captcha_saas/
 ├── solvers/              # 打码算法实现（gitignore，不上传到仓库）
 │   ├── huya/
 │   │   └── huya_v3.py    # 虎牙 V3 — 导出 HuyaV3 类
-│   └── tencent/
-│       └── tcaptcha.py   # 腾讯 TCaptcha — 导出 TencentTCaptcha 类
+│   ├── tencent/
+│   │   └── tcaptcha.py   # 腾讯 TCaptcha — 导出 TencentTCaptcha 类
+│   ├── yidun/            # 网易易盾滑块 — 导出 run()
+│   ├── geetest4/         # 极验4（risk_type=ai）— 导出 run()
+│   ├── aliyun/           # 阿里云 Captcha 2.0（V2 滑块）— 导出 run()
+│   ├── shumei/           # 数美智能验证码（多模式）— 导出 run()
+│   └── _vendor/          # 厂商资产（project_api + sites，gitignore）
 ├── templates/            # Jinja2 页面模板
 ├── static/               # CSS/JS
 ├── data/
@@ -93,6 +103,24 @@ class MySolver:
     # 可附带其他字段...
 }
 ```
+
+---
+
+## 已接入验证码类型
+
+| type | 平台 | 单价 | 链路 | 关键返回 | 说明 |
+|---|---|---|---|---|---|
+| `huya_v3` | 虎牙 V3 | 10 | 纯协议 | `session_data/guid/sdid` 令牌 | 完整流程可发短信 |
+| `tencent_tcaptcha` | 腾讯 TCaptcha | 15 | 纯协议 | `ticket` + `randstr` | 多类型自动分类 |
+| `yidun` | 网易易盾滑块 | 15 | 纯协议 + Node SDK | `validate` 令牌 | 支持业务 captcha_id/referer/width |
+| `geetest4` | 极验4 | 10 | 纯协议 | `seccode` + `lot_number` | 仅 risk_type=ai 一键通过 |
+| `aliyun_captcha` | 阿里云 Captcha 2.0 | 20 | curl_cffi + jsdom 沙箱 | `captchaVerifyParam` | V2 SLIDING 滑块，单发约 12s |
+| `shumei` | 数美智能验证码 | 25 | jsdom 补环境 | `rid` | `mode` 参数：spatial_select ✅ / select ✅ / icon_select、slide（实验，通过率不稳定）/ seq_select（需配 VLM） |
+| `geetestV4` | 极验4（代打码） | 20 | 算法仓 `/data/jiyan` | `captcha_output` / `pass_token` | 自动识别滑块/点选等类型 |
+| `geetestV3` | 极验3（代打码） | 15 | 算法仓 `/data/jiyan` | `validate` / `seccode` | 需传 `gt` + `challenge` |
+
+统一入口：`POST /api/v1/solve`，body 为 `{"type": "...", "param": {...}, "solve_only": false}`。
+详细参数与响应字段见 `/docs/<type>` 页面。
 
 ---
 
