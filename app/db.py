@@ -119,12 +119,13 @@ def seed():
              generate_password_hash(config.INIT_ADMIN_PASSWORD),
              config.OWNER_CREDITS, "admin", "active", now, now))
         admin_id = cur.lastrowid
-        # 兼容旧 owner token
-        cur.execute("SELECT id FROM tokens WHERE token=?", (config.OWNER_TOKEN,))
-        if not cur.fetchone():
-            cur.execute(
-                "INSERT INTO tokens(user_id,token,note,status,created_at) VALUES(?,?,?,?,?)",
-                (admin_id, config.OWNER_TOKEN, "owner(兼容旧token)", "active", now))
+        # 兼容旧 owner token（仅当配置了 OWNER_TOKEN 时才创建）
+        if config.OWNER_TOKEN:
+            cur.execute("SELECT id FROM tokens WHERE token=?", (config.OWNER_TOKEN,))
+            if not cur.fetchone():
+                cur.execute(
+                    "INSERT INTO tokens(user_id,token,note,status,created_at) VALUES(?,?,?,?,?)",
+                    (admin_id, config.OWNER_TOKEN, "owner(兼容旧token)", "active", now))
     # 定价
     for t, v in config.DEFAULT_PRICING.items():
         cur.execute("SELECT type FROM pricing WHERE type=?", (t,))
@@ -368,7 +369,9 @@ def log_usage(user_id, token_id, type_name, points, success, duration_ms, detail
          json.dumps(detail, ensure_ascii=False) if detail else None, int(time.time())))
 
 
-def usage_stats(user_id=None, type_filter=None, limit=50, offset=0):
+def usage_stats(user_id=None, type_filter=None, success_filter=None,
+                keyword=None, date_from=None, date_to=None,
+                limit=50, offset=0):
     where = []
     args = []
     if user_id is not None:
@@ -377,10 +380,33 @@ def usage_stats(user_id=None, type_filter=None, limit=50, offset=0):
     if type_filter:
         where.append("type=?")
         args.append(type_filter)
+    if success_filter is not None and success_filter != "":
+        where.append("success=?")
+        args.append(int(success_filter))
+    if keyword:
+        kw = "%%%s%%" % keyword
+        where.append("(IFNULL(type,'') LIKE ? OR IFNULL(detail,'') LIKE ?)")
+        args.extend([kw, kw])
+    if date_from:
+        try:
+            import datetime as _dt
+            ts = int(_dt.datetime.strptime(date_from, "%Y-%m-%d").timestamp())
+            where.append("created_at>=?")
+            args.append(ts)
+        except Exception:
+            pass
+    if date_to:
+        try:
+            import datetime as _dt
+            ts = int(_dt.datetime.strptime(date_to, "%Y-%m-%d").timestamp()) + 86399
+            where.append("created_at<=?")
+            args.append(ts)
+        except Exception:
+            pass
     w = ("WHERE " + " AND ".join(where)) if where else ""
     rows = q("SELECT * FROM usage_logs %s ORDER BY id DESC LIMIT ? OFFSET ?" % w,
-             args + [limit, offset])
-    total = qone("SELECT COUNT(*) c FROM usage_logs %s" % w, args)["c"]
+             tuple(args) + (limit, offset))
+    total = qone("SELECT COUNT(*) c FROM usage_logs %s" % w, tuple(args))["c"]
     return [dict(r) for r in rows], total
 
 
@@ -469,18 +495,69 @@ def delete_redeem_codes(codes):
 
 
 # ---------- 积分流水 ----------
-def list_transactions(uid=None, keyword=None, limit=30, offset=0):
-    """积分流水。uid 为 None 时返回全局流水（管理员用）；keyword 模糊搜索用户名 / 原因 / 操作者。"""
+def list_transactions(uid=None, keyword=None, change_type=None,
+                      date_from=None, date_to=None,
+                      limit=30, offset=0):
+    """积分流水。uid 为 None 时返回全局流水（管理员用）。
+    keyword 模糊搜索用户名/原因/操作者。change_type: 'in'/'out'/None。
+    date_from/date_to: 'YYYY-MM-DD' 字符串。
+    """
     if uid is not None:
-        rows = q("SELECT * FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?",
-                 (uid, limit, offset))
-        total = qone("SELECT COUNT(*) c FROM transactions WHERE user_id=?", (uid,))["c"]
+        where, args = [], []
+        if keyword:
+            kw = "%%%s%%" % keyword
+            where.append("(IFNULL(reason,'') LIKE ?)")
+            args.append(kw)
+        if change_type == "in":
+            where.append("change>0")
+        elif change_type == "out":
+            where.append("change<0")
+        if date_from:
+            try:
+                import datetime as _dt
+                ts = int(_dt.datetime.strptime(date_from, "%Y-%m-%d").timestamp())
+                where.append("created_at>=?")
+                args.append(ts)
+            except Exception:
+                pass
+        if date_to:
+            try:
+                import datetime as _dt
+                ts = int(_dt.datetime.strptime(date_to, "%Y-%m-%d").timestamp()) + 86399
+                where.append("created_at<=?")
+                args.append(ts)
+            except Exception:
+                pass
+        w = ("WHERE user_id=? AND " + " AND ".join(where)) if where else ("WHERE user_id=?")
+        rows = q("SELECT * FROM transactions %s ORDER BY id DESC LIMIT ? OFFSET ?" % w,
+                 (uid,) + tuple(args) + (limit, offset))
+        total = qone("SELECT COUNT(*) c FROM transactions %s" % w, (uid,) + tuple(args))["c"]
     else:
         where, args = [], []
         if keyword:
             kw = "%%%s%%" % keyword
             where.append("(IFNULL(u.username,'') LIKE ? OR IFNULL(t.reason,'') LIKE ? OR IFNULL(a.username,'') LIKE ?)")
             args.extend([kw, kw, kw])
+        if change_type == "in":
+            where.append("t.change>0")
+        elif change_type == "out":
+            where.append("t.change<0")
+        if date_from:
+            try:
+                import datetime as _dt
+                ts = int(_dt.datetime.strptime(date_from, "%Y-%m-%d").timestamp())
+                where.append("t.created_at>=?")
+                args.append(ts)
+            except Exception:
+                pass
+        if date_to:
+            try:
+                import datetime as _dt
+                ts = int(_dt.datetime.strptime(date_to, "%Y-%m-%d").timestamp()) + 86399
+                where.append("t.created_at<=?")
+                args.append(ts)
+            except Exception:
+                pass
         w = ("WHERE " + " AND ".join(where)) if where else ""
         sql = ("SELECT t.* FROM transactions t "
                "LEFT JOIN users u ON t.user_id=u.id "
