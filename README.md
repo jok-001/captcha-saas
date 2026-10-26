@@ -199,9 +199,15 @@ curl -X POST http://<ip>:9000/api/v1/solve \
 | `users` | 用户 | `id`, `username`, `email`, `credits`, `role`, `status` |
 | `tokens` | API 密钥 | `user_id`, `token`, `status`（单用户单 active） |
 | `pricing` | 定价 | `type`(PK), `points`, `enabled`, `note` |
-| `usage_logs` | 用量记录 | `user_id`, `type`, `points`, `success`, `duration_ms` |
-| `transactions` | 积分流水 | `user_id`, `change`, `balance_after`, `reason` |
+| `usage_logs` | 用量记录 | `user_id`, `type`, `points`, `success`, `duration_ms`, **`order_no`**, **`charged`**, **`balance_after`** |
+| `transactions` | 积分流水 | `user_id`, `change`, `balance_after`, `reason`, **`kind`**, **`order_no`**, **`ref`** |
 | `redeem_codes` | 兑换码 | `code`, `points`, `used_by`, `note` |
+| **`settings`** | **系统配置（KV）** | `key`(PK), `value`, `updated_at`, `updated_by` |
+| **`checkins`** | **每日签到** | `user_id`, `checkin_date`, `points`, `transaction_id`；`UNIQUE(user_id, checkin_date)` 保证每日一次 |
+
+**删用户必须级联五张表**：`tokens` / `transactions` / `usage_logs` / `checkins` / `redeem_codes`(解除占用)。
+其中 `checkins` 与 `tokens` 声明了 `FOREIGN KEY(user_id)->users(id)`，而连接上开了
+`PRAGMA foreign_keys=ON`，所以这两张表**必须在 `DELETE users` 之前清掉**，否则抛 `IntegrityError` → 500。
 
 ---
 
@@ -217,8 +223,36 @@ curl -X POST http://<ip>:9000/api/v1/solve \
 | `/api/solve` | POST | 兼容旧版入口（同 /api/v1/solve） |
 | `/api/huya_send_phone` | POST | 虎牙完整流程 |
 | `/api/huya_captcha` | POST | 虎牙仅解验证码 |
+| `/api/checkin` | POST | 每日签到（会话鉴权，非 API token），见下 |
 
 成功才扣积分，失败不扣；积分不足返回 402，类型未接入返回 501。
+
+### 打码订单号
+
+每次打码（成功与失败）都会生成一个订单号，格式 `CS` + `YYYYMMDD` + 10 位大写十六进制，
+固定 20 字符（如 `CS20261026834B883C46`），在对所有分支的**响应顶层** `order_no` 字段返回。
+
+- 鉴权失败（401/403）不生成订单号（此时无可信用户）
+- 订单号唯一性由 `usage_logs.order_no` 唯一索引兜底，冲突自动换号
+- 用途：反馈问题时提供订单号即可定位这一单的类型、结果、耗时、扣费
+
+### 每日签到
+
+`POST /api/checkin`，无 body，基于会话 Cookie（**不是** API token）：
+
+```json
+// 签到成功（200）
+{"ok": true,  "reward": 100, "credits": 1280, "message": "签到成功", "already": false, "code": 200}
+// 今日已签到（200，幂等，不是错误）
+{"ok": false, "reward": 0,   "credits": 1280, "message": "今日已签到，明天再来", "already": true, "code": 200}
+// 功能关闭（403） / 未登录（401）
+{"ok": false, "reward": 0, "message": "签到功能暂未开放", "code": 403}
+```
+
+签到日期按**固定 UTC+8** 计算（不用服务器本地时区，避免 UTC 机器上北京时间 08:00 前后串天导致一日双签）。
+并发安全由 `checkins` 的 `UNIQUE(user_id, checkin_date)` 索引仲裁 —— 多 worker 同时请求只有一个能插入成功。
+
+> 注意：`ok` 表示「本次是否真的签到成功」，已签到分支返回 `false`，前端据此走 `message` 分支而不是误报「+0 积分」。
 
 ### 手机号格式（虎牙 V3）
 
@@ -237,12 +271,31 @@ curl -X POST http://<ip>:9000/api/v1/solve \
 | `/register` | 注册（赠送积分） |
 | `/dashboard` | 仪表盘 |
 | `/profile` | 个人信息（Token / 邮箱 / 改密） |
-| `/usage` | 调用记录（支持模糊搜索、结果过滤、时间范围） |
-| `/transactions` | 积分流水（支持模糊搜索、收支过滤、时间范围） |
+| **`/records`** | **使用记录**（打码与积分变动合并视图，6 列：id / 类型 / 结果 / 余额 / 耗时 / 时间） |
+| `/usage` | 302 → `/records?kind=solve`（保留旧书签） |
+| `/transactions` | 302 → `/records`（保留旧书签） |
 | `/recharge` | 兑换码充值 |
 | `/docs` | **使用文档首页**（通用信息 + 接口列表 + 跳转按钮） |
 | `/docs/<type>` | **单个接口详细文档**（参数、示例、响应格式） |
 | `/admin/` | 管理后台（需 admin 角色） |
+| **`/admin/records`** | **全部记录**（全平台打码 + 积分变动，可按用户/类型/结果/关键词/日期筛选） |
+| **`/admin/settings`** | **系统管理**（签到开关与积分、注册开关与赠送积分；验证码校验 / WAF 为预留项，灰化不可编辑） |
+
+### 分页
+
+所有列表页共用 `templates/_pagination.html` 的 `render_pager(pager)` 宏：
+
+- 首尾页常显、页码超过 7 个时用省略号折叠、当前页高亮
+- **跳页输入框**（回车/失焦触发，越界自动钳制到 `[1, 总页数]`）
+- 每页条数切换：`10 / 20 / 50 / 100`（全站统一四档）
+- 页数 ≤ 1 时不渲染页码与跳页框（只保留「共 N 条」与每页切换）
+- 响应式：≤900px 收起首尾页按钮，≤640px 只留上一页/页码/下一页/跳页
+
+`pager` 契约：`{page, per_page, total, pages, endpoint, args}`，`args` 里的空值会被丢弃，
+链接形如 `?keyword=x&page=3` 而不是 `?keyword=&page=3`。
+
+> 服务端计算顺序必须是「先钳制 page → 再算 offset → 再查库」，否则会出现
+> 「页脚显示第 999 页、表格是空的」。非法 `?page=abc` 一律兜底为 1。
 
 ---
 
