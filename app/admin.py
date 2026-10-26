@@ -387,7 +387,8 @@ def redeem():
         note = (request.form.get("note") or "").strip()
         if points <= 0 or count <= 0:
             flash("积分和数量必须为正", "error")
-            return redirect(url_for("admin.redeem"))
+            # 校验失败也要回到原来的筛选/分页，否则用户改完数值得重新筛一遍
+            return redirect(url_for("admin.redeem", **_redeem_query(request.form)))
         codes = db.create_redeem_code(points, session["user_id"], count, note=note)
         flash("已生成 %d 个兑换码（每个 %d 积分）" % (count, points), "success")
         # 生成后仍要带完整列表上下文，避免模板渲染列表区时变量未定义
