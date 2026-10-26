@@ -683,8 +683,10 @@ def set_user_status(uid, status):
 def delete_user(uid):
     """删除用户及其关联数据（tokens/流水/用量/签到），兑换码占用记录解除。
 
-    注意顺序：checkins 声明了 FOREIGN KEY(user_id)->users(id)，而连接上开了
-    PRAGMA foreign_keys=ON，所以必须先删 checkins 再删 users，否则抛 IntegrityError。
+    注意顺序：checkins 与 tokens 都声明了 FOREIGN KEY(user_id)->users(id)，
+    而连接上开了 PRAGMA foreign_keys=ON，所以这两张表必须在 DELETE users 之前清掉，
+    否则抛 IntegrityError。其余表（transactions/usage_logs/redeem_codes）无外键声明，
+    漏删只脏不报错，但仍要清干净。
     """
     with _db_lock:
         conn = get_conn()

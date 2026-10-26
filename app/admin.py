@@ -1,5 +1,7 @@
 import re
 import time
+from urllib.parse import urlsplit, parse_qs
+
 import app.db as db
 import config
 from app import admin_required, parse_paging, pagination
@@ -96,6 +98,39 @@ def user_create():
     return redirect(url_for("admin.users"))
 
 
+def _users_back():
+    """回到「用户管理」，尽量保住筛选与分页（编辑/启停/删除之后）。
+
+    取值优先级：表单隐藏域 → 当前 query string → Referer 里的 query。
+    为什么需要 Referer 兜底：users.html 的删除表单是 `action=url_for(...)`（不带 query），
+    编辑弹窗表单也没有筛选字段，所以 POST 时 `request.args` 是空的、`request.form` 里也没有。
+    将来模板补上 `<input type="hidden" name="keyword/page/per_page">` 后会自动走第一条，
+    这个 fallback 自然失效，无需改代码。
+    Referer 必须**同 host**（netloc == request.host）且 path 恰为 /admin/users，
+    page/per_page 必须是数字——避免跨站页面伪造 Referer 往跳转里塞参数。
+    """
+    q = {}
+    for k in ("keyword", "page", "per_page"):
+        v = request.form.get(k) or request.args.get(k)
+        if v:
+            q[k] = v
+    if not q and request.referrer:
+        try:
+            p = urlsplit(request.referrer)
+            if p.netloc == request.host and p.path.rstrip("/") == "/admin/users":
+                qs = parse_qs(p.query)
+                kw = (qs.get("keyword") or [""])[0].strip()
+                if kw:
+                    q["keyword"] = kw
+                for k in ("page", "per_page"):
+                    v = (qs.get(k) or [""])[0]
+                    if v.isdigit():
+                        q[k] = v
+        except (ValueError, TypeError):
+            pass
+    return redirect(url_for("admin.users", **q))
+
+
 @bp.route("/user/<int:uid>/edit", methods=["POST"])
 @admin_required
 def user_edit(uid):
@@ -108,10 +143,10 @@ def user_edit(uid):
     u = db.get_user(uid)
     if not u:
         flash("用户不存在", "error")
-        return redirect(url_for("admin.users"))
+        return _users_back()
     if u["username"] == config.INIT_ADMIN_USERNAME and status != "active":
         flash("不能停用超级管理员", "error")
-        return redirect(url_for("admin.users"))
+        return _users_back()
     db.execute("UPDATE users SET email=?, role=?, status=?, updated_at=? WHERE id=?",
                (email or None, role, status, int(time.time()), uid))
     if delta_str:
@@ -126,7 +161,7 @@ def user_edit(uid):
             except ValueError as e:
                 flash(str(e), "error")
     flash("用户信息已更新", "success")
-    return redirect(url_for("admin.users"))
+    return _users_back()
 
 
 @bp.route("/user/<int:uid>/status", methods=["POST"])
@@ -136,10 +171,10 @@ def user_status(uid):
     u = db.get_user(uid)
     if u and u["username"] == config.INIT_ADMIN_USERNAME and status != "active":
         flash("不能停用超级管理员", "error")
-        return redirect(url_for("admin.users"))
+        return _users_back()
     db.set_user_status(uid, status)
     flash("用户状态已设为 %s" % status, "success")
-    return redirect(url_for("admin.users"))
+    return _users_back()
 
 
 @bp.route("/user/<int:uid>/delete", methods=["POST"])
@@ -148,13 +183,13 @@ def user_delete(uid):
     u = db.get_user(uid)
     if not u:
         flash("用户不存在", "error")
-        return redirect(url_for("admin.users"))
+        return _users_back()
     if u["username"] == config.INIT_ADMIN_USERNAME:
         flash("不能删除超级管理员", "error")
-        return redirect(url_for("admin.users"))
+        return _users_back()
     db.delete_user(uid)
-    flash("已删除用户 %s（含其 Token / 用量 / 流水）" % u["username"], "success")
-    return redirect(url_for("admin.users"))
+    flash("已删除用户 %s（含其 Token / 用量 / 流水 / 签到记录）" % u["username"], "success")
+    return _users_back()
 
 
 @bp.route("/user/<int:uid>/transactions")
