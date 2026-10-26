@@ -1,4 +1,5 @@
 import os
+import warnings
 import config
 from flask import Flask, session, redirect, url_for, request, jsonify, g, flash
 
@@ -90,7 +91,16 @@ PER_PAGE_CHOICES = (10, 20, 50, 100)
 
 
 def parse_paging(args, default_per_page=20):
-    """① 先解析（此时 total 还未知）。非法值一律兜底，绝不抛 ValueError。"""
+    """① 先解析（此时 total 还未知）。非法值一律兜底，绝不抛 ValueError。
+
+    注意：`default_per_page` **必须**落在 PER_PAGE_CHOICES 里，否则会被静默降级成 20
+    （线上踩过：/admin/records 传 30 → 页面「每页」实际显示 20，很难发现）。
+    这里用 warnings 留一条可见的痕迹，而不是抛异常——不能因为一个配置笔误让整页 500。
+    """
+    if default_per_page not in PER_PAGE_CHOICES:
+        warnings.warn(
+            "parse_paging(default_per_page=%r) 不在 PER_PAGE_CHOICES %r 内，将被静默降级为 20"
+            % (default_per_page, PER_PAGE_CHOICES), RuntimeWarning, stacklevel=2)
     try:
         page = int(str(args.get("page") or "1").strip())
     except (TypeError, ValueError):

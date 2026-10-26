@@ -1,11 +1,19 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render_pager %}
 {% set active='users' %}
 {% set page_title = '用户管理' %}
+{#- 分页上下文：后端新版传 pager，旧版只有平铺 page/pages/total/per_page。
+    两种都吃，优先 pager。 -#}
+{% set _pg = pager if pager is defined and pager else none %}
+{% set _total = _pg.total if _pg else total|default(0) %}
+{% set _page = _pg.page if _pg else page|default(1) %}
+{% set _per = _pg.per_page if _pg else per_page|default(20) %}
+{% set _pages = _pg.pages if _pg else pages|default(0) %}
 {% block content %}
 
 <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:12px">
   <div>
-    <h3 style="margin:0">用户管理</h3>
+    <h3 style="margin:0">用户管理{% if _total %} <span class="muted small" style="font-weight:400">（共 {{ _total }} 位）</span>{% endif %}</h3>
     <div class="muted small mt" style="margin-top:4px">所有积分变动（含管理员调整、注册赠送）都会写入积分流水，可在「积分流水」中核对。</div>
   </div>
   <button class="btn" onclick="openModal('createModal')">＋ 新增用户</button>
@@ -16,6 +24,7 @@
     <form method="get" style="margin:0;display:inline">
       <input name="keyword" value="{{ keyword }}" placeholder="搜索用户名 / 邮箱"
              onkeydown="if(event.key==='Enter'){event.preventDefault();this.form.submit();}">
+      <input type="hidden" name="per_page" value="{{ _per }}">
     </form>
   </div>
 </div>
@@ -50,6 +59,16 @@
   </table>
   </div>
   {% if not users %}<p class="empty">没有匹配的用户{% if keyword %}（关键词：{{ keyword }}）{% endif %}</p>{% endif %}
+
+  {% if _pg %}
+  {{ render_pager(_pg) }}
+  {% elif _pages %}
+  {#- 旧路由兜底：用平铺变量拼 pager；旧路由不认 per_page，关掉胶囊 -#}
+  {{ render_pager({'page': _page, 'per_page': _per, 'total': _total, 'pages': _pages,
+                   'endpoint': 'admin.users',
+                   'args': {'keyword': keyword|default('')}},
+                  per_page_options=None) }}
+  {% endif %}
 </div>
 
 <div class="modal-mask" id="createModal" onclick="if(event.target===this)closeModal(this)">

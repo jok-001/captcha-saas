@@ -681,11 +681,16 @@ def set_user_status(uid, status):
 
 
 def delete_user(uid):
-    """删除用户及其关联数据（tokens/流水/用量），兑换码占用记录解除。"""
+    """删除用户及其关联数据（tokens/流水/用量/签到），兑换码占用记录解除。
+
+    注意顺序：checkins 声明了 FOREIGN KEY(user_id)->users(id)，而连接上开了
+    PRAGMA foreign_keys=ON，所以必须先删 checkins 再删 users，否则抛 IntegrityError。
+    """
     with _db_lock:
         conn = get_conn()
         conn.execute("DELETE FROM usage_logs WHERE user_id=?", (uid,))
         conn.execute("DELETE FROM transactions WHERE user_id=?", (uid,))
+        conn.execute("DELETE FROM checkins WHERE user_id=?", (uid,))
         conn.execute("DELETE FROM tokens WHERE user_id=?", (uid,))
         conn.execute("UPDATE redeem_codes SET used_by=NULL, used_at=NULL WHERE used_by=?", (uid,))
         conn.execute("DELETE FROM users WHERE id=?", (uid,))

@@ -221,6 +221,16 @@
       }).then(function (data) {
         stopLoading();
 
+        // 「今日已签到」是一个状态，不是错误：不管后端用 ok:true+already 还是
+        // ok:false+already 表达，都置为已签到并给 info 提示（两种写法都兼容）。
+        // 严格比较 true，避免后端把布尔写成字符串 "true"/"false"/0 时误判。
+        if (data.already === true) {
+          markDone();
+          if (data.credits != null) updateCredits(data.credits);
+          toast(data.message || '今日已签到，明天再来', 'info');
+          return;
+        }
+
         if (data.ok === false) {
           toast(data.message || '签到失败', 'error');
           return;
@@ -228,13 +238,18 @@
 
         markDone();
         if (data.credits != null) updateCredits(data.credits);
+
+        // reward 兼容三种写法：reward / amount；但必须 > 0 才算「本次到账」。
+        // 后端「今日已签到」分支会给 reward=null、amount=0，
+        // 若不过滤 0 就会弹出「签到成功，+0 积分」。
         var reward = data.reward != null ? data.reward : data.amount;
-        toast(
-          reward != null
-            ? '签到成功，+' + reward + ' 积分'
-            : (data.message || '签到成功'),
-          'success'
-        );
+        if (!(reward > 0)) reward = null;
+
+        if (reward != null) {
+          toast('签到成功，+' + reward + ' 积分', 'success');
+        } else {
+          toast(data.message || '签到成功', 'success');
+        }
       }).catch(function (err) {
         stopLoading();
         if (err && err.soft) {

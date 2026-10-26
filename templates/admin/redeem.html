@@ -2,6 +2,13 @@
 {% from "_pagination.html" import render_pager %}
 {% set active='redeem' %}
 {% set page_title = '兑换码' %}
+{#- 分页上下文：后端新版传 pager（含 endpoint/args/per_page 白名单），
+    旧版只有平铺 page/pages/total/limit。两种都吃，优先 pager。 -#}
+{% set _pg = pager if pager is defined and pager else none %}
+{% set _total = _pg.total if _pg else total|default(0) %}
+{% set _page = _pg.page if _pg else page|default(1) %}
+{% set _per = _pg.per_page if _pg else (per_page|default(limit|default(20))) %}
+{% set _pages = _pg.pages if _pg else pages|default(0) %}
 {% block content %}
 
 <div class="card" style="max-width:600px">
@@ -32,7 +39,7 @@
 
 <div class="card">
   <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
-    <h3 style="margin:0">兑换码管理 <span class="muted small" style="font-weight:400">（共 {{ total }} 条）</span></h3>
+    <h3 style="margin:0">兑换码管理 <span class="muted small" style="font-weight:400">（共 {{ _total }} 条）</span></h3>
     <form method="get" class="row" style="gap:8px;margin:0;flex-wrap:nowrap;align-items:center">
       <input name="keyword" value="{{ keyword }}" placeholder="搜索兑换码 / 备注 / 用户"
              style="width:220px" onkeydown="if(event.key==='Enter'){event.preventDefault();this.form.submit();}">
@@ -47,6 +54,7 @@
         <option value="{{ uid }}" {% if used_by|string == uid|string %}selected{% endif %}>{{ name }}</option>
         {% endfor %}
       </select>
+      <input type="hidden" name="per_page" value="{{ _per }}">
       {% if keyword or status or used_by %}<a class="btn btn-ghost btn-sm" href="{{ url_for('admin.redeem') }}">清除</a>{% endif %}
     </form>
   </div>
@@ -57,7 +65,7 @@
     <input type="hidden" name="status" value="{{ status }}">
     <input type="hidden" name="used_by" value="{{ used_by }}">
     <input type="hidden" name="keyword" value="{{ keyword }}">
-    <input type="hidden" name="page" value="{{ page }}">
+    <input type="hidden" name="page" value="{{ _page }}">
     <div class="table-wrap">
     <table class="tbl-lg">
       <tr>
@@ -85,13 +93,16 @@
     </div>
   </form>
 
-  {#- 后端此页仍是平铺 page/pages/total + limit（未走 parse_paging），
-      这里拼一个 pager 交给统一宏；该路由不支持 per_page 切换，故关掉胶囊。 -#}
-  {% set redeem_pager = {
-       'page': page, 'per_page': limit, 'total': total, 'pages': pages,
-       'endpoint': 'admin.redeem',
-       'args': {'status': status, 'used_by': used_by, 'keyword': keyword}} %}
-  {{ render_pager(redeem_pager, per_page_options=None) }}
+  {% if _pg %}
+  {{ render_pager(_pg) }}
+  {% elif _pages %}
+  {#- 旧路由兜底：用平铺变量拼 pager；旧路由不认 per_page，关掉胶囊 -#}
+  {{ render_pager({'page': _page, 'per_page': _per, 'total': _total, 'pages': _pages,
+                   'endpoint': 'admin.redeem',
+                   'args': {'status': status|default(''), 'used_by': used_by|default(''),
+                            'keyword': keyword|default('')}},
+                  per_page_options=None) }}
+  {% endif %}
   {% else %}
   <p class="empty">暂无兑换码记录{% if status or used_by %}（当前筛选无结果）{% endif %}</p>
   {% endif %}

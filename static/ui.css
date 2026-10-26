@@ -14,7 +14,7 @@
   align-items: center;
   justify-content: flex-end;   /* 主控区靠右；换行后行内元素同样右对齐 */
   flex-wrap: wrap;
-  gap: 12px 16px;
+  gap: 12px 14px;
   margin-top: 18px;
   padding-top: 15px;
   border-top: 1px dashed var(--line);
@@ -109,7 +109,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 29px;
+  min-width: 27px;
   height: 26px;
   padding: 0 7px;
   border-radius: 7px;

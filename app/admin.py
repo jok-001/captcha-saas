@@ -17,6 +17,15 @@ RECORD_KINDS = [
 ]
 
 
+def _pager(pg, endpoint, **args):
+    """把 pagination() 的结果包成 templates/_pagination.html 的 render_pager 契约：
+    {page, per_page, total, pages, endpoint, args}。
+    args 里的空值直接丢掉，链接保持干净（?page=3 而不是 ?status=&page=3）。
+    """
+    return dict(pg, endpoint=endpoint,
+                args={k: v for k, v in args.items() if v not in (None, "", 0)})
+
+
 @bp.route("/")
 @bp.route("/overview")
 @admin_required
@@ -36,14 +45,30 @@ def overview():
 @bp.route("/users")
 @admin_required
 def users():
-    keyword = (request.args.get("keyword") or "").strip()
+    """用户列表（分页 + 关键词），分页参数与 /records、/admin/records 同一套。"""
+    a = request.args
+    keyword = (a.get("keyword") or "").strip()
+    page, per_page = parse_paging(a, 20)
+
+    where, args = "", ()
     if keyword:
         kw = "%%%s%%" % keyword
-        rows = db.q("SELECT * FROM users WHERE username LIKE ? OR IFNULL(email,'') LIKE ? ORDER BY id DESC",
-                    (kw, kw))
-    else:
-        rows = db.q("SELECT * FROM users ORDER BY id DESC")
-    return render_template("admin/users.html", users=[dict(r) for r in rows], keyword=keyword)
+        where = "WHERE (username LIKE ? OR IFNULL(email,'') LIKE ?)"
+        args = (kw, kw)
+
+    total = db.qone("SELECT COUNT(*) c FROM users %s" % where, args)["c"]
+    # 顺序：先算 total → 钳制 page → 再算 offset → 才查库（否则页码与内容会错位）
+    pg = pagination(page, per_page, total)
+    rows = db.q("SELECT * FROM users %s ORDER BY id DESC LIMIT ? OFFSET ?" % where,
+                tuple(args) + (pg["per_page"], pg["offset"]))
+
+    return render_template("admin/users.html",
+                           users=[dict(r) for r in rows],
+                           keyword=keyword,
+                           total=pg["total"], page=pg["page"], per_page=pg["per_page"],
+                           pages=pg["pages"], first_item=pg["first_item"],
+                           last_item=pg["last_item"],
+                           pager=_pager(pg, "admin.users", keyword=keyword))
 
 
 @bp.route("/user/create", methods=["POST"])
@@ -193,7 +218,9 @@ def _to_admin_records(**extra):
 def records():
     """全局合并流水（用量 + 积分流水），可按用户/类型/结果/关键词/时间筛选。"""
     a = request.args
-    page, per_page = parse_paging(a, 30)
+    # 默认每页必须落在 PER_PAGE_CHOICES (10/20/50/100) 里：
+    # 这里曾写 30，不在白名单 → 被 parse_paging 静默降级成 20，页面上「每页」高亮与意图不符。
+    page, per_page = parse_paging(a, 20)
     uid_raw = (a.get("uid") or "").strip()
     uid = int(uid_raw) if uid_raw.isdigit() else None
     kind = (a.get("kind") or "").strip()
@@ -215,10 +242,9 @@ def records():
         pg = pagination(pg["page"], pg["per_page"], total)
 
     target = db.get_user(uid) if uid else None
-    pager = dict(pg, endpoint="admin.records", args={
-        k: v for k, v in (("uid", uid_raw if uid else ""), ("kind", kind),
-                          ("result", result), ("keyword", keyword),
-                          ("date_from", date_from), ("date_to", date_to)) if v})
+    pager = _pager(pg, "admin.records", uid=uid_raw if uid else "",
+                   kind=kind, result=result, keyword=keyword,
+                   date_from=date_from, date_to=date_to)
     return render_template(
         "admin/records.html",
         rows=rows, total=pg["total"], page=pg["page"], per_page=pg["per_page"],
@@ -329,28 +355,47 @@ def redeem():
             return redirect(url_for("admin.redeem"))
         codes = db.create_redeem_code(points, session["user_id"], count, note=note)
         flash("已生成 %d 个兑换码（每个 %d 积分）" % (count, points), "success")
-        # 生成后仍要带列表上下文，避免模板渲染列表区时变量未定义
-        ctx = _redeem_ctx(request.args)
-        rows, total = db.list_redeem_codes(status=ctx["status"], used_by=ctx["used_by"],
-                                           limit=ctx["limit"], offset=(ctx["page"] - 1) * ctx["limit"])
-        users = {r["id"]: r["username"] for r in db.q("SELECT id,username FROM users")}
-        ctx.update(rows=rows, total=total, pages=(total + ctx["limit"] - 1) // ctx["limit"], users=users)
-        return render_template("admin/redeem.html", codes=codes, points=points, **ctx)
-    # GET：列表 + 筛选
+        # 生成后仍要带完整列表上下文，避免模板渲染列表区时变量未定义
+        return _redeem_render(new_codes=codes, new_points=points)
+    return _redeem_render()
+
+
+def _redeem_render(new_codes=None, new_points=0):
+    """兑换码列表渲染（GET 与「生成后重渲染」共用，保证分页逻辑只有一处）。"""
     ctx = _redeem_ctx(request.args)
+    per_page = ctx["per_page"]
+    page = ctx["page"]
     rows, total = db.list_redeem_codes(status=ctx["status"], used_by=ctx["used_by"],
-                                      keyword=ctx["keyword"],
-                                      limit=ctx["limit"], offset=(ctx["page"] - 1) * ctx["limit"])
+                                       keyword=ctx["keyword"],
+                                       limit=per_page, offset=(page - 1) * per_page)
+    pg = pagination(page, per_page, total)
+    if pg["offset"] != (page - 1) * per_page:
+        # 筛选后页码越界（如 ?page=9 但只剩 2 页）→ 回到末页，避免空白页
+        rows, total = db.list_redeem_codes(status=ctx["status"], used_by=ctx["used_by"],
+                                           keyword=ctx["keyword"],
+                                           limit=pg["per_page"], offset=pg["offset"])
+        pg = pagination(pg["page"], pg["per_page"], total)
+
     users = {r["id"]: r["username"] for r in db.q("SELECT id,username FROM users")}
-    ctx.update(rows=rows, total=total, pages=(total + ctx["limit"] - 1) // ctx["limit"], users=users)
-    return render_template("admin/redeem.html", codes=None, **ctx)
+    ctx.update(rows=rows, total=pg["total"], page=pg["page"], pages=pg["pages"],
+               per_page=pg["per_page"], limit=pg["per_page"],
+               first_item=pg["first_item"], last_item=pg["last_item"], users=users,
+               # 翻页时保留全部有效筛选条件（status / used_by / keyword）
+               pager=_pager(pg, "admin.redeem", status=ctx["status"],
+                            used_by=ctx["used_by"], keyword=ctx["keyword"]))
+    return render_template("admin/redeem.html",
+                           codes=new_codes, points=new_points, **ctx)
 
 
 def _redeem_query(form):
-    """从表单里还原筛选参数（批量删除后保持筛选上下文）。"""
+    """从表单里还原筛选参数（批次删除后保持筛选与分页上下文）。
+
+    表单没有 action，会 POST 回当前 URL，所以 per_page 可能只在 query 里，
+    这里两处都取，避免删完自动掉回每页 20 条。
+    """
     out = {}
-    for k in ("status", "used_by", "keyword", "page"):
-        v = form.get(k)
+    for k in ("status", "used_by", "keyword", "page", "per_page"):
+        v = form.get(k) or request.args.get(k)
         if v:
             out[k] = v
     return out
@@ -360,6 +405,6 @@ def _redeem_ctx(args):
     status = args.get("status", "")  # '' / 'used' / 'unused'
     used_by = args.get("used_by", "")
     keyword = (args.get("keyword") or "").strip()
-    page = int(args.get("page", 1) or 1)
-    limit = 20
-    return {"status": status, "used_by": used_by, "keyword": keyword, "page": page, "limit": limit}
+    page, per_page = parse_paging(args, 20)
+    return {"status": status, "used_by": used_by, "keyword": keyword,
+            "page": page, "per_page": per_page}
