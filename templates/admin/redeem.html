@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render_pager %}
 {% set active='redeem' %}
+{% set page_title = '兑换码' %}
 {% block content %}
 
 <div class="card" style="max-width:600px">
@@ -56,10 +58,11 @@
     <input type="hidden" name="used_by" value="{{ used_by }}">
     <input type="hidden" name="keyword" value="{{ keyword }}">
     <input type="hidden" name="page" value="{{ page }}">
-    <table>
+    <div class="table-wrap">
+    <table class="tbl-lg">
       <tr>
         <th style="width:30px"><input type="checkbox" id="selectAll" style="width:auto" onchange="toggleAll(this)"></th>
-        <th>兑换码</th><th>积分</th><th>备注</th><th>状态</th><th>创建者</th><th>创建时间</th><th>使用者</th><th>使用时间</th>
+        <th>兑换码</th><th>积分</th><th>备注</th><th>状态</th><th>创建者</th><th>使用者</th><th>创建时间</th><th>使用时间</th>
       </tr>
       {% for r in rows %}
       <tr>
@@ -69,25 +72,26 @@
         <td class="muted">{{ r.note or '—' }}</td>
         <td>{% if r.used_by %}<span class="pill pill-off">已使用</span>{% else %}<span class="pill pill-on">未使用</span>{% endif %}</td>
         <td class="muted">{{ r.created_by_name or '—' }}</td>
-        <td class="muted">{{ r.created_at|ctime }}</td>
         <td>{% if r.used_by %}<b>{{ r.used_by_name or '#' ~ r.used_by }}</b>{% else %}—{% endif %}</td>
-        <td class="muted">{% if r.used_at %}{{ r.used_at|ctime }}{% else %}—{% endif %}</td>
+        <td class="rec-time">{{ r.created_at|ctime }}</td>
+        <td class="rec-time">{% if r.used_at %}{{ r.used_at|ctime }}{% else %}<span class="rec-empty">—</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </table>
+    </div>
     <div class="row mt" style="justify-content:space-between">
       <span class="muted small" id="selCount">已选 0 个</span>
       <button class="btn btn-danger btn-sm">批量删除选中</button>
     </div>
   </form>
 
-  {% if pages > 1 %}
-  <div class="row mt">
-    {% if page>1 %}<a class="btn btn-ghost btn-sm" href="?keyword={{ keyword }}&status={{ status }}&used_by={{ used_by }}&page={{ page-1 }}">上一页</a>{% endif %}
-    <span class="muted small">第 {{ page }} / {{ pages }} 页</span>
-    {% if page<pages %}<a class="btn btn-ghost btn-sm" href="?keyword={{ keyword }}&status={{ status }}&used_by={{ used_by }}&page={{ page+1 }}">下一页</a>{% endif %}
-  </div>
-  {% endif %}
+  {#- 后端此页仍是平铺 page/pages/total + limit（未走 parse_paging），
+      这里拼一个 pager 交给统一宏；该路由不支持 per_page 切换，故关掉胶囊。 -#}
+  {% set redeem_pager = {
+       'page': page, 'per_page': limit, 'total': total, 'pages': pages,
+       'endpoint': 'admin.redeem',
+       'args': {'status': status, 'used_by': used_by, 'keyword': keyword}} %}
+  {{ render_pager(redeem_pager, per_page_options=None) }}
   {% else %}
   <p class="empty">暂无兑换码记录{% if status or used_by %}（当前筛选无结果）{% endif %}</p>
   {% endif %}

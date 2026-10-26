@@ -1,7 +1,7 @@
 import re
 import app.db as db
 import config
-from app import login_required
+from app import login_required, parse_paging, pagination
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, abort
 
 bp = Blueprint("web", __name__)
@@ -16,6 +16,10 @@ def index():
 
 @bp.route("/register", methods=["GET", "POST"])
 def register():
+    # 注册开关：GET 也要拦（直接把链接发给别人时不能看到注册表单）
+    if not db.get_setting_bool("signup_enabled", True):
+        flash("注册通道已关闭，如需账号请联系管理员", "error")
+        return redirect(url_for("web.login"))
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         email = (request.form.get("email") or "").strip()
@@ -32,8 +36,9 @@ def register():
         elif db.get_user_by_username(username):
             flash("用户名已存在", "error")
         else:
+            bonus = db.get_setting_int("signup_bonus", config.SIGNUP_BONUS)
             db.create_user(username, email, password, role="user")
-            flash("注册成功，赠送 %d 积分，请登录" % config.SIGNUP_BONUS, "success")
+            flash("注册成功，赠送 %d 积分，请登录" % bonus, "success")
             return redirect(url_for("web.login"))
     return render_template("register.html")
 
@@ -108,56 +113,168 @@ def profile():
     return render_template("profile.html", user=user, token_row=token_row)
 
 
+# ---------- 合并流水页（原「使用情况」+「积分流水」合一） ----------
+KIND_OPTIONS = [
+    {"value": "solve", "label": "验证码打码"},
+    {"value": "checkin", "label": "每日签到"},
+    {"value": "signup", "label": "注册赠送"},
+    {"value": "redeem", "label": "积分兑换"},
+    {"value": "adjust", "label": "系统调整"},
+]
+
+_KEEP_ARGS = ("page", "per_page", "keyword", "date_from", "date_to", "kind", "result")
+
+
+def _to_records(**extra):
+    """旧路由 302 到合并页，尽量保住分页/筛选上下文。"""
+    q = {k: v for k, v in request.args.items() if k in _KEEP_ARGS and v}
+    q.update({k: v for k, v in extra.items() if v})
+    return redirect(url_for("web.records", **q))
+
+
+@bp.route("/records")
+@login_required
+def records():
+    uid = session["user_id"]
+    a = request.args
+    page, per_page = parse_paging(a, 20)
+    kind = (a.get("kind") or "").strip()
+    if kind not in [k["value"] for k in KIND_OPTIONS]:
+        kind = ""
+    result = (a.get("result") or "").strip()
+    if result not in ("success", "fail"):
+        result = ""
+    keyword = (a.get("keyword") or "").strip()
+    date_from = (a.get("date_from") or "").strip()
+    date_to = (a.get("date_to") or "").strip()
+    filt = dict(kind=kind or None, result=result or None, keyword=keyword or None,
+                date_from=date_from or None, date_to=date_to or None)
+
+    rows, total = db.list_records(uid, limit=per_page, offset=(page - 1) * per_page, **filt)
+    pg = pagination(page, per_page, total)
+    if pg["offset"] != (page - 1) * per_page:
+        # 页码越界（筛选后总页数变少）→ 回到最后一页，避免空白页
+        rows, total = db.list_records(uid, limit=pg["per_page"], offset=pg["offset"], **filt)
+        pg = pagination(pg["page"], pg["per_page"], total)
+
+    # _pagination.html 的 render_pager() 需要 endpoint + args（不含 page/per_page）
+    pager = dict(pg, endpoint="web.records", args={
+        k: v for k, v in (("kind", kind), ("result", result), ("keyword", keyword),
+                          ("date_from", date_from), ("date_to", date_to)) if v})
+
+    return render_template(
+        "records.html",
+        rows=rows, total=pg["total"], page=pg["page"], per_page=pg["per_page"],
+        pages=pg["pages"], has_prev=pg["has_prev"], has_next=pg["has_next"],
+        prev_page=pg["prev_page"], next_page=pg["next_page"],
+        first_item=pg["first_item"], last_item=pg["last_item"],
+        pager=pager,
+        kind=kind, result=result, keyword=keyword,
+        date_from=date_from, date_to=date_to,
+        filters={"kind": kind, "result": result, "keyword": keyword,
+                 "date_from": date_from, "date_to": date_to,
+                 "per_page": per_page},
+        kinds=KIND_OPTIONS,
+        summary=db.records_summary(uid),
+        pricing=db.get_pricing(),
+        active="records")
+
+
 @bp.route("/transactions")
 @login_required
 def transactions():
-    """用户自己的积分流水（支持模糊搜索、收支过滤、时间范围）。"""
-    uid = session["user_id"]
-    page = int(request.args.get("page", 1) or 1)
-    limit = 20
-    offset = (page - 1) * limit
-    keyword = (request.args.get("keyword") or "").strip()
-    change_type = request.args.get("change_type", "")
-    date_from = request.args.get("date_from", "")
-    date_to = request.args.get("date_to", "")
-
-    rows, total = db.list_transactions(uid, keyword=keyword or None,
-                                       change_type=change_type or None,
-                                       date_from=date_from or None,
-                                       date_to=date_to or None,
-                                       limit=limit, offset=offset)
-    admins = {r["id"]: r["username"] for r in db.q("SELECT id,username FROM users WHERE role='admin'")}
-    pages = (total + limit - 1) // limit
-    return render_template("transactions.html", rows=rows, total=total, page=page, pages=pages,
-                           admins=admins, keyword=keyword, change_type=change_type,
-                           date_from=date_from, date_to=date_to)
+    """已合并进 /records，保留路由做兼容重定向。"""
+    return _to_records()
 
 
 @bp.route("/usage")
 @login_required
 def usage():
+    """已合并进 /records，保留路由做兼容重定向。"""
+    return _to_records(kind="solve")
+
+
+# ---------- 每日签到 ----------
+@bp.route("/checkin", methods=["POST"])
+@login_required
+def checkin():
     uid = session["user_id"]
-    type_filter = request.args.get("type", "")
-    success_filter = request.args.get("success", "")
-    keyword = (request.args.get("keyword") or "").strip()
-    date_from = request.args.get("date_from", "")
-    date_to = request.args.get("date_to", "")
-    page = int(request.args.get("page", 1) or 1)
-    limit = 20
-    offset = (page - 1) * limit
-    rows, total = db.usage_stats(uid, type_filter=type_filter or None,
-                                 success_filter=success_filter or None,
-                                 keyword=keyword or None,
-                                 date_from=date_from or None,
-                                 date_to=date_to or None,
-                                 limit=limit, offset=offset)
-    total_summary, by_type = db.usage_summary(uid)
-    pricing = db.get_pricing()
-    pages = (total + limit - 1) // limit
-    return render_template("usage.html", rows=rows, total=total, page=page, pages=pages,
-                           type_filter=type_filter, success_filter=success_filter,
-                           keyword=keyword, date_from=date_from, date_to=date_to,
-                           total_summary=total_summary, by_type=by_type, pricing=pricing)
+    ok, code, payload = db.do_checkin(uid)
+    if code == "ok":
+        flash("签到成功，+%d 积分（当前 %d）"
+              % (payload.get("credited", 0), payload.get("balance", 0)), "success")
+    elif code == "already":
+        flash("今天已经签到过了，明天再来", "error")
+    elif code == "disabled":
+        flash("签到功能暂未开放", "error")
+    else:
+        flash(payload.get("error") or "签到失败，请稍后重试", "error")
+    nxt = (request.form.get("next") or "").strip()
+    if nxt.startswith("/") and not nxt.startswith("//"):
+        return redirect(nxt)
+    return redirect(url_for("web.dashboard"))
+
+
+@bp.route("/api/checkin", methods=["GET", "POST"])
+def api_checkin():
+    """签到 JSON 接口（session 鉴权，无 CSRF，同源 Cookie 即可）。
+
+    契约以 static/ui.js 为准：
+      成功 200 {"ok": true,  "reward": 100, "credits": 1280, "message": "签到成功", "already": false}
+      已签 200 {"ok": false, "reward": 0,   "credits": 1280,
+                "message": "今日已签到，明天再来", "already": true, "code": 200}
+      关闭 403 {"ok": false, "message": "签到功能暂未开放"}
+      未登录 401 {"ok": false, "message": "请先登录"}
+
+    `already` 分支必须同时满足 ok=false 且 reward=0：
+    ui.js 是 `if (data.ok === false) { toast(data.message); return; }` 提前返回，
+    只有走这条才会显示「今日已签到，明天再来」；若给 ok=true 会继续往下执行
+    `var reward = data.reward != null ? data.reward : data.amount;` 然后 toast
+    「签到成功，+0 积分」——（给 reward=null 也没用，会被 amount=0 接住）。
+    """
+    if "user_id" not in session:
+        return jsonify({"ok": False, "already": False, "success": False,
+                        "reward": 0, "amount": 0, "credited": 0,
+                        "message": "请先登录", "error": "未登录", "code": 401}), 401
+    uid = session["user_id"]
+    cfg_points = db.get_setting_int("checkin_points", 100)
+    if request.method == "GET":
+        st = db.get_checkin_state(uid)
+        bal = (db.get_user(uid) or {}).get("credits")
+        return jsonify({"ok": True, "success": True, "already": st["checked"],
+                        "enabled": st["enabled"], "reward": st["reward"],
+                        "credits": bal, "balance": bal, "credited": 0,
+                        "message": "今日已签到，明天再来" if st["checked"] else "",
+                        "points_config": st["reward"], "done_at": st["done_at"],
+                        "total_days": st["total_days"]})
+    ok, code, payload = db.do_checkin(uid)
+    if code == "ok":
+        bal = payload.get("balance")
+        got = payload.get("credited", 0)
+        return jsonify({"ok": True, "already": False, "success": True,
+                        "reward": got, "amount": got, "credited": got,
+                        "credits": bal, "balance": bal,
+                        "points_config": cfg_points,
+                        "done_at": payload.get("done_at"),
+                        "message": "签到成功", "code": 200})
+    if code == "already":
+        # 幂等：HTTP 200（不是错误），但 ok=false 让前端走 message 分支
+        bal = (db.get_user(uid) or {}).get("credits")
+        return jsonify({"ok": False, "already": True, "success": True,
+                        "reward": 0, "amount": 0, "credited": 0,
+                        "credits": bal, "balance": bal,
+                        "points_config": cfg_points,
+                        "done_at": payload.get("done_at"),
+                        "message": "今日已签到，明天再来", "code": 200})
+    if code == "disabled":
+        return jsonify({"ok": False, "already": False, "success": False,
+                        "reward": 0, "amount": 0, "credited": 0,
+                        "message": "签到功能暂未开放",
+                        "error": "签到功能暂未开放", "code": 403}), 403
+    return jsonify({"ok": False, "already": False, "success": False,
+                    "reward": 0, "amount": 0, "credited": 0,
+                    "message": payload.get("error") or "签到失败",
+                    "error": payload.get("error") or "签到失败", "code": 500}), 500
 
 
 @bp.route("/recharge", methods=["GET", "POST"])

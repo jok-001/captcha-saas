@@ -36,58 +36,66 @@ def _auth_token(tok):
     return u, row, None
 
 
-def _error(msg, code):
-    return jsonify({"success": False, "error": msg, "code": code}), code
+def _error(msg, code, order_no=None):
+    body = {"success": False, "error": msg, "code": code}
+    if order_no:
+        body["order_no"] = order_no
+    return jsonify(body), code
 
 
 def _do(type_name, param, solve_only):
     t0 = time.time()
     tok = _get_api_token()
     user, token_row, err = _auth_token(tok)
-    # 鉴权失败不记录（无有效用户/Token）
+    # 鉴权失败不记录（无有效用户/Token），也就不生成订单号
     if err:
         return _error(err[0], err[1])
 
-    def _log_fail(points, detail, code):
+    # 鉴权通过即发号：失败调用同样要有单号可查（用户报障时拿它来查）
+    order_no = db.gen_order_no()
+
+    def _log_fail(detail, code):
         dur = int((time.time() - t0) * 1000)
-        db.log_usage(user["id"], token_row["id"], type_name, 0, 0, dur, detail)
-        return _error(detail.get("error", ""), code)
+        used_no, _ = db.settle_solve(user["id"], token_row["id"], type_name,
+                                     0, False, dur, detail, order_no)
+        return _error(detail.get("error", ""), code, used_no)
 
     price_row = db.get_price(type_name)
     if not price_row:
-        return _log_fail(None, {"error": "unknown type: %s" % type_name}, 400)
+        return _log_fail({"error": "unknown type: %s" % type_name}, 400)
     if not price_row["enabled"]:
-        return _log_fail(price_row["points"], {"error": "type not available yet: %s" % type_name}, 501)
+        return _log_fail({"error": "type not available yet: %s" % type_name}, 501)
 
     points = price_row["points"]
     if user["credits"] < points:
-        return _log_fail(points, {"error": "insufficient credits (have %d, need %d)" % (user["credits"], points)}, 402)
+        return _log_fail(
+            {"error": "insufficient credits (have %d, need %d)" % (user["credits"], points)}, 402)
 
     try:
         proxy = param.get("proxy")
         res = dispatch(type_name, param, proxy=proxy, solve_only=solve_only)
     except UnsupportedType as e:
-        return _log_fail(points, {"error": str(e)}, 501)
+        return _log_fail({"error": str(e)}, 501)
     except SolverError as e:
-        return _log_fail(points, {"error": str(e)}, 400)
+        return _log_fail({"error": str(e)}, 400)
     except Exception as e:
-        return _log_fail(points, {"error": repr(e)}, 500)
+        return _log_fail({"error": repr(e)}, 500)
 
     dur = int((time.time() - t0) * 1000)
     success = bool(res.get("success")) if isinstance(res, dict) else False
-    if success:
-        db.adjust_credits(user["id"], -points, "api:%s" % type_name, None)
-        db.log_usage(user["id"], token_row["id"], type_name, points, 1, dur, res)
-    else:
-        # 未成功不扣积分，仅记录
-        db.log_usage(user["id"], token_row["id"], type_name, 0, 0, dur, res)
+    # 单事务结算：成功扣积分 + 写流水；失败只记录不扣费
+    used_no, balance = db.settle_solve(user["id"], token_row["id"], type_name,
+                                       points, success, dur, res, order_no)
     db.touch_token(token_row["id"])
 
+    if balance is None:
+        balance = user["credits"] - (points if success else 0)
     return jsonify({
         "success": success,
         "type": type_name,
+        "order_no": used_no,
         "credits_spent": points if success else 0,
-        "credits_left": user["credits"] - (points if success else 0),
+        "credits_left": balance,
         "result": res,
     }), 200
 

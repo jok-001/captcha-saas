@@ -1,0 +1,166 @@
+{#
+  ===========================================================================
+  通用分页组件（Paginator）
+  ===========================================================================
+  业务页面里两行代码即可接入：
+
+      {% from "_pagination.html" import render_pager %}
+      {{ render_pager(pager) }}
+
+  pager 数据结构（后端渲染模板时传入）：
+      {
+        "page": 3,                  # 当前页（1 起）
+        "per_page": 20,             # 每页条数
+        "total": 137,               # 总记录数
+        "pages": 7,                 # 总页数
+        "endpoint": "web.usage",    # url_for 端点名
+        "args": {"type": "shumei"}  # 需要保留的查询参数（不含 page / per_page）
+      }
+
+  可选参数（一般不用传）：
+      render_pager(pager,
+                   per_page_options=[10, 20, 50, 100],  # 传 None 关闭「每页条数」切换
+                   show_first_last=True,                # 首页/尾页按钮
+                   show_per_page=True,                  # 每页条数切换
+                   show_jump=True)                      # 跳页输入框
+
+  行为约定：
+    * pages <= 1 时宏不输出任何内容 —— 调用方不用再包 {% if pages > 1 %}
+    * 页码越界（比如用户手改 URL 成 ?page=999）宏内部自动夹到 [1, pages]
+    * args 里的空值（""/None/[]）会被丢弃，链接保持干净（?page=3 而不是 ?type=&page=3）
+    * 依赖：static/ui.css（样式）、static/ui.js（跳页输入框的边界纠正与回车/失焦跳转）
+  ===========================================================================
+#}
+
+
+{# 生成分页链接：合并保留参数 + page / per_page，去掉空值，避免重复键 #}
+{% macro pager_url(endpoint, args, page=None, per_page=None) -%}
+  {%- set q = {} -%}
+  {%- for k, v in (args or {}).items() -%}
+    {%- if v is not none and v != '' and v != [] -%}{%- set _ = q.update({k: v}) -%}{%- endif -%}
+  {%- endfor -%}
+  {%- if page is not none -%}{%- set _ = q.update({'page': page}) -%}{%- endif -%}
+  {%- if per_page is not none -%}{%- set _ = q.update({'per_page': per_page}) -%}{%- endif -%}
+  {{- url_for(endpoint, **q) -}}
+{%- endmacro %}
+
+
+{% macro render_pager(pager, per_page_options=[10, 20, 50, 100],
+                      show_first_last=True, show_per_page=True, show_jump=True) -%}
+{%- set last = [1, pager.pages|int]|max -%}
+{%- set total = pager.total|int -%}
+{%- set cur = [[1, pager.page|int]|max, last]|min -%}
+{%- set per = pager.per_page|default(20)|int -%}
+{%- set ep = pager.endpoint -%}
+{%- set args = pager.args|default({}, true) -%}
+
+{#- 显隐规则：整条只在「有数据且至少有一个控件」时出现。
+    这样「每页 100 条 + 结果只有 1 页」时仍然能看到每页切换，不会进得去出不来；
+    而 total=0 或后端不支持任何切换时（如兑换码页）整条不渲染，不留孤立的一行。 -#}
+{%- set show_nav = last > 1 -%}
+{%- set show_per = show_per_page and per_page_options -%}
+{%- set show_jump_x = show_jump and last > 1 -%}
+{%- set show_bar = total > 0 and (show_nav or show_per or show_jump_x) -%}
+{%- if show_bar -%}
+
+{#- 页码序列：首页尾页常显，中间用省略号折叠（总页数 <= 7 时全显） -#}
+{%- set ns = namespace(nums=[]) -%}
+{%- if last <= 7 -%}
+  {%- for i in range(1, last + 1) -%}{%- set _ = ns.nums.append(i) -%}{%- endfor -%}
+{%- elif cur <= 4 -%}
+  {%- for i in range(1, 6) -%}{%- set _ = ns.nums.append(i) -%}{%- endfor -%}
+  {%- set _ = ns.nums.append('gap') -%}
+  {%- set _ = ns.nums.append(last) -%}
+{%- elif cur >= last - 3 -%}
+  {%- set _ = ns.nums.append(1) -%}
+  {%- set _ = ns.nums.append('gap') -%}
+  {%- for i in range(last - 4, last + 1) -%}{%- set _ = ns.nums.append(i) -%}{%- endfor -%}
+{%- else -%}
+  {%- set _ = ns.nums.append(1) -%}
+  {%- set _ = ns.nums.append('gap') -%}
+  {%- for i in range(cur - 1, cur + 2) -%}{%- set _ = ns.nums.append(i) -%}{%- endfor -%}
+  {%- set _ = ns.nums.append('gap') -%}
+  {%- set _ = ns.nums.append(last) -%}
+{%- endif -%}
+
+<nav class="pg" aria-label="分页导航">
+  <div class="pg-info">{% if show_nav %}第 <b>{{ cur }}</b> / {{ last }} 页<span class="pg-sep">·</span>{% endif %}<span class="pg-total">共 {{ total }} 条</span></div>
+
+  {%- if show_nav %}
+  <div class="pg-nav">
+    {%- if show_first_last %}
+      {%- if cur <= 1 %}
+    <span class="pg-btn is-off" aria-disabled="true" title="已是首页">«</span>
+      {%- else %}
+    <a class="pg-btn pg-first" href="{{ pager_url(ep, args, 1, per) }}" aria-label="首页" title="首页">«</a>
+      {%- endif %}
+    {%- endif %}
+    {%- if cur <= 1 %}
+    <span class="pg-btn is-off" aria-disabled="true" title="已是第一页">‹<span class="pg-lbl">上一页</span></span>
+    {%- else %}
+    <a class="pg-btn pg-prev" href="{{ pager_url(ep, args, cur - 1, per) }}" rel="prev" aria-label="上一页" title="上一页（{{ cur - 1 }}）">‹<span class="pg-lbl">上一页</span></a>
+    {%- endif %}
+    {%- for n in ns.nums %}
+      {%- if n == 'gap' %}
+    <span class="pg-gap" aria-hidden="true">…</span>
+      {%- elif n == cur %}
+    <span class="pg-btn pg-num cur" aria-current="page" title="第 {{ n }} 页（当前）">{{ n }}</span>
+      {%- else %}
+    <a class="pg-btn pg-num" href="{{ pager_url(ep, args, n, per) }}" aria-label="第 {{ n }} 页" title="第 {{ n }} 页">{{ n }}</a>
+      {%- endif %}
+    {%- endfor %}
+    {%- if cur >= last %}
+    <span class="pg-btn is-off" aria-disabled="true" title="已是最后一页"><span class="pg-lbl">下一页</span>›</span>
+    {%- else %}
+    <a class="pg-btn pg-next" href="{{ pager_url(ep, args, cur + 1, per) }}" rel="next" aria-label="下一页" title="下一页（{{ cur + 1 }}）"><span class="pg-lbl">下一页</span>›</a>
+    {%- endif %}
+    {%- if show_first_last %}
+      {%- if cur >= last %}
+    <span class="pg-btn is-off" aria-disabled="true" title="已是尾页">»</span>
+      {%- else %}
+    <a class="pg-btn pg-last" href="{{ pager_url(ep, args, last, per) }}" aria-label="尾页" title="尾页（{{ last }}）">»</a>
+      {%- endif %}
+    {%- endif %}
+  </div>
+  {%- endif %}
+
+  {%- if show_per or show_jump_x %}
+  <div class="pg-tools">
+    {%- if show_per %}
+    <div class="pg-per" role="group" aria-label="每页显示条数">
+      <span class="pg-per-lbl" aria-hidden="true">每页</span>
+      {%- for opt in per_page_options %}
+        {%- if opt|int == per %}
+      <span class="pg-per-opt is-on" aria-current="true">{{ opt }}</span>
+        {%- else %}
+      <a class="pg-per-opt" href="{{ pager_url(ep, args, 1, opt) }}" title="每页 {{ opt }} 条" aria-label="每页 {{ opt }} 条">{{ opt }}</a>
+        {%- endif %}
+      {%- endfor %}
+    </div>
+    {%- endif %}
+
+    {%- if show_jump_x %}
+    <form class="pg-jump" method="get" action="{{ url_for(ep) }}" novalidate data-pg-jump>
+      {%- for k, v in args.items() if v is not none and v != '' and v != [] %}
+        {%- if v is string or v is number %}
+      <input type="hidden" name="{{ k }}" value="{{ v }}">
+        {%- else %}
+          {%- for item in v %}
+      <input type="hidden" name="{{ k }}" value="{{ item }}">
+          {%- endfor %}
+        {%- endif %}
+      {%- endfor %}
+      <input type="hidden" name="per_page" value="{{ per }}">
+      <span class="pg-jump-lbl" aria-hidden="true">跳至</span>
+      <input class="pg-jump-input" type="number" name="page" min="1" max="{{ last }}" step="1"
+             inputmode="numeric" autocomplete="off" placeholder="{{ cur }}" data-current="{{ cur }}"
+             aria-label="输入页码跳转，范围 1 到 {{ last }}，回车或离开输入框立即跳转">
+      <span class="pg-jump-suffix" aria-hidden="true">页</span>
+      <button type="submit" class="pg-btn pg-jump-go" title="跳转" aria-label="跳转到输入的页码">↵</button>
+    </form>
+    {%- endif %}
+  </div>
+  {%- endif %}
+</nav>
+{%- endif -%}
+{%- endmacro %}

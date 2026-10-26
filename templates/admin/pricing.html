@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set active='pricing' %}
+{% set page_title = '定价管理' %}
 {% block content %}
 
 <div class="card">
@@ -32,7 +33,8 @@
 
 <div class="card">
   <h3 style="margin:0 0 12px">当前定价</h3>
-  <table>
+  <div class="table-wrap">
+  <table class="tbl-md">
     <tr><th>类型</th><th>积分/次</th><th>状态</th><th>说明</th><th>操作</th></tr>
     {% for p in pricing %}
     <tr>
@@ -53,6 +55,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 
 <script>

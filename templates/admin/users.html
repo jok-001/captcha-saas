@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set active='users' %}
+{% set page_title = '用户管理' %}
 {% block content %}
 
 <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -20,8 +21,9 @@
 </div>
 
 <div class="card">
-  <table>
-    <tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>操作</th></tr>
+  <div class="table-wrap">
+  <table class="tbl-lg">
+    <tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>积分</th><th>操作</th><th>注册时间</th></tr>
     {% for u in users %}
     <tr>
       <td>{{ u.id }}</td>
@@ -30,7 +32,6 @@
       <td>{% if u.role=='admin' %}<span class="tag">admin</span>{% else %}user{% endif %}</td>
       <td>{% if u.status=='active' %}<span class="pill pill-on">启用</span>{% else %}<span class="pill pill-off">停用</span>{% endif %}</td>
       <td><b>{{ u.credits }}</b></td>
-      <td class="muted">{{ u.created_at|ctime }}</td>
       <td>
         <div class="row" style="gap:6px;flex-wrap:nowrap">
           <button class="btn btn-ghost btn-sm" onclick='openEdit({{ u|tojson }})'>编辑</button>
@@ -43,9 +44,12 @@
           {% endif %}
         </div>
       </td>
+      <td class="rec-time">{{ u.created_at|ctime }}</td>
     </tr>
     {% endfor %}
   </table>
+  </div>
+  {% if not users %}<p class="empty">没有匹配的用户{% if keyword %}（关键词：{{ keyword }}）{% endif %}</p>{% endif %}
 </div>
 
 <div class="modal-mask" id="createModal" onclick="if(event.target===this)closeModal(this)">

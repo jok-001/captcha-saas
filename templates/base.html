@@ -3,11 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+<title>{% block title %}{% if page_title is defined and page_title %}{{ page_title }} · {% endif %}{{ APP_NAME }}{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='ui.css') }}">
 </head>
 <body>
 {% if current_user %}
+{#- 签到入口三态：后端 context_processor 注入
+      checkin = {"enabled": bool, "checked": bool, "reward": int}
+    （enabled 对应 settings.checkin_enabled，reward 对应 settings.checkin_points）
+    未注入时按「功能开启 + 今日未签到 + 100 分」渲染，按钮照常可点，
+    接口未就绪只在 console warn，不打断页面。 -#}
+{% set ck = checkin if checkin is defined and checkin else {} %}
+{% set ck_enabled = ck.enabled if ck.enabled is defined and ck.enabled is not none else (CHECKIN_ENABLED if CHECKIN_ENABLED is defined else true) %}
+{% set ck_checked = ck.checked if ck.checked is defined and ck.checked is not none else false %}
+{% set ck_reward = ck.reward if ck.reward is defined and ck.reward is not none else (CHECKIN_POINTS if CHECKIN_POINTS is defined else (CHECKIN_REWARD if CHECKIN_REWARD is defined else 100)) %}
+{% set ck_state = 'off' if not ck_enabled else ('done' if ck_checked else 'ready') %}
 <div class="app">
   <aside class="sidebar">
     <div class="brand">{{ APP_NAME }}</div>
@@ -15,27 +26,65 @@
     <nav>
       <a href="{{ url_for('web.dashboard') }}" class="{% if active=='dashboard' %}on{% endif %}">仪表盘</a>
       <a href="{{ url_for('web.profile') }}" class="{% if active=='profile' %}on{% endif %}">个人信息</a>
-      <a href="{{ url_for('web.usage') }}" class="{% if active=='usage' %}on{% endif %}">使用情况</a>
-      <a href="{{ url_for('web.transactions') }}" class="{% if active=='transactions' %}on{% endif %}">积分流水</a>
+      <a href="{{ url_for('web.records') }}" class="{% if active=='records' %}on{% endif %}">使用记录</a>
       <a href="{{ url_for('web.recharge') }}" class="{% if active=='recharge' %}on{% endif %}">积分 / 兑换</a>
       <a href="{{ url_for('web.docs') }}" class="{% if active=='docs' %}on{% endif %}">使用文档</a>
       {% if current_user.role == 'admin' %}
       <div class="nav-sep">管理</div>
-      <a href="{{ url_for('admin.overview') }}">后台总览</a>
-      <a href="{{ url_for('admin.users') }}">用户管理</a>
-      <a href="{{ url_for('admin.pricing') }}">定价管理</a>
-      <a href="{{ url_for('admin.usage') }}">全局用量</a>
-      <a href="{{ url_for('admin.redeem') }}">兑换码</a>
+      <a href="{{ url_for('admin.overview') }}" class="{% if active=='overview' %}on{% endif %}">后台总览</a>
+      <a href="{{ url_for('admin.records') }}" class="{% if active=='admin_records' %}on{% endif %}">全部记录</a>
+      <a href="{{ url_for('admin.users') }}" class="{% if active=='users' %}on{% endif %}">用户管理</a>
+      <a href="{{ url_for('admin.pricing') }}" class="{% if active=='pricing' %}on{% endif %}">定价管理</a>
+      <a href="{{ url_for('admin.redeem') }}" class="{% if active=='redeem' %}on{% endif %}">兑换码</a>
+      <a href="{{ url_for('admin.settings') }}" class="{% if active=='settings' %}on{% endif %}">系统管理</a>
       {% endif %}
     </nav>
     <div class="side-foot">
       <div class="u">{{ current_user.username }}{% if current_user.role=='admin' %} <span class="tag">admin</span>{% endif %}</div>
-      <div class="c">积分: <b>{{ current_user.credits }}</b></div>
+      <div class="c">积分: <b data-credits>{{ current_user.credits }}</b></div>
       <a class="btn btn-ghost btn-sm logout-btn" href="{{ url_for('web.logout') }}">退出登录</a>
     </div>
   </aside>
   <main class="main">
-    <div class="topbar"><h1>{% block h1 %}{{ self.title() }}{% endblock %}</h1></div>
+    <div class="topbar">
+      <h1>{% block h1 %}{% if page_title is defined and page_title %}{{ page_title }}{% else %}{{ APP_NAME }}{% endif %}{% endblock %}</h1>
+      <div class="topbar-right">
+        <div class="checkin" data-checkin
+             data-state="{{ ck_state }}"
+             data-msg-off="签到功能暂未开放"
+             data-url="{{ CHECKIN_URL if CHECKIN_URL is defined else '/api/checkin' }}">
+          {%- if ck_state == 'done' %}
+          <button type="button" class="checkin-btn is-done" disabled aria-disabled="true" title="今日已签到">
+            <span class="checkin-ico" aria-hidden="true">✓</span>
+            <span class="checkin-txt">已签到</span>
+          </button>
+          {%- elif ck_state == 'off' %}
+          <button type="button" class="checkin-btn is-off" title="签到功能暂未开放">
+            <span class="checkin-ico" aria-hidden="true">＋</span>
+            <span class="checkin-txt">签到</span>
+          </button>
+          {%- else %}
+          <button type="button" class="checkin-btn" title="每日签到领取 {{ ck_reward }} 积分">
+            <span class="checkin-ico" aria-hidden="true">＋</span>
+            <span class="checkin-txt">签到 +{{ ck_reward }}</span>
+          </button>
+          {%- endif %}
+        </div>
+        <a class="topbar-user" href="{{ url_for('web.profile') }}" title="{{ current_user.username }}">
+          <span class="topbar-ava" aria-hidden="true">{{ current_user.username[:1]|upper }}</span>
+          <span class="topbar-uname">{{ current_user.username }}</span>
+          <span class="topbar-credits">积分 <b data-credits>{{ current_user.credits }}</b></span>
+        </a>
+        <a class="topbar-logout" href="{{ url_for('web.logout') }}" aria-label="退出登录" title="退出登录">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </a>
+      </div>
+    </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat,msg in msgs %}<div class="alert alert-{{cat}}">{{msg}}</div>{% endfor %}
     {% endwith %}
@@ -54,5 +103,6 @@
   </div>
 </div>
 {% endif %}
+<script src="{{ url_for('static', filename='ui.js') }}" defer></script>
 </body>
 </html>

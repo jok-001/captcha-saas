@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% set page_title = '系统管理' %}
+{% block content %}
+
+{#- 页面契约（后端 admin.settings 提供）
+    groups : [{group, group_label, items: [
+                {key,label,type,value,default,group,group_label,
+                 min,max,options,description,reserved,editable} ]}]
+    - type : bool / int / select / string
+    - reserved=true → 只读、无 name、不提交
+    - 表单字段名统一 s_<key>；bool 用 checkbox（未勾选不提交，后端按缺失=0 处理）
+-#}
+
+{% set group_desc = {
+  'account': '注册通道与赠送策略，只影响之后新注册的账号，不追溯历史用户。',
+  'checkin': '右上角每日签到入口的开关与奖励积分。关闭后入口保留，点击提示未开放。',
+  'security': '以下配置尚未接入代码逻辑，仅作占位展示，后续版本启用后自动生效。'
+} %}
+
+<div class="alert alert-info">
+  配置修改仅对之后发生的行为生效，历史记录不受影响。
+</div>
+
+<form method="post" action="{{ url_for('admin.settings') }}" autocomplete="off">
+  {% for g in groups %}
+  <div class="card">
+    <div class="cfg-group">
+      <div class="cfg-group-head">
+        <h3 style="margin:0">{{ g.group_label }}</h3>
+        <span class="muted small">{{ g['items']|length }} 项</span>
+      </div>
+      <p class="cfg-group-desc">{{ group_desc.get(g.group, '') }}</p>
+
+      {% for it in g['items'] %}
+      <div class="cfg-row{% if it.reserved %} is-reserved{% endif %}">
+        <div class="cfg-main">
+          <div class="cfg-label">
+            {{ it.label }}
+            {% if it.reserved %}<span class="cfg-badge">预留</span>{% endif %}
+          </div>
+          {% if it.description %}<div class="cfg-desc">{{ it.description }}</div>{% endif %}
+          <div class="cfg-meta">
+            配置键 <code>s_{{ it.key }}</code>
+            {% if it.type == 'int' %}
+            · 默认 {{ it.default }}{% if it['min'] is not none %} · 范围 {{ it['min'] }} ~ {{ it.max }}{% endif %}
+            {% elif it.type == 'bool' %}
+            · 默认{{ '开启' if it.default else '关闭' }}
+            {% elif it.default is not none and it.default != '' %}
+            · 默认 {{ it.default }}
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="cfg-ctl">
+          {% if it.type == 'bool' %}
+          <label class="sw">
+            <input type="checkbox" {% if not it.reserved %}name="s_{{ it.key }}" value="1"{% endif %}
+                   {% if it.value %}checked{% endif %}
+                   {% if it.reserved or not it.editable %}disabled{% endif %}
+                   aria-label="{{ it.label }}">
+            <span class="sw-track"><span class="sw-dot"></span></span>
+            <span class="sw-text">{{ '已开启' if it.value else '已关闭' }}</span>
+          </label>
+
+          {% elif it.type == 'int' %}
+          <input type="number" value="{{ it.value }}"
+                 {% if not it.reserved %}name="s_{{ it.key }}"{% endif %}
+                 {% if it['min'] is not none %}min="{{ it['min'] }}"{% endif %}
+                 {% if it.max is not none %}max="{{ it.max }}"{% endif %}
+                 step="1" inputmode="numeric"
+                 {% if it.reserved or not it.editable %}disabled{% endif %}
+                 aria-label="{{ it.label }}">
+          <span class="cfg-unit">分</span>
+
+          {% elif it.type == 'select' %}
+          <select {% if not it.reserved %}name="s_{{ it.key }}"{% endif %}
+                  {% if it.reserved or not it.editable %}disabled{% endif %}
+                  aria-label="{{ it.label }}">
+            {% for o in (it.options or []) %}
+              {% set ov = o.value if o is mapping else o %}
+              {% set ol = o.label if o is mapping else o %}
+            <option value="{{ ov }}" {% if it.value|string == ov|string %}selected{% endif %}>{{ ol }}</option>
+            {% endfor %}
+          </select>
+
+          {% else %}
+          <input type="text" value="{{ it.value }}"
+                 {% if not it.reserved %}name="s_{{ it.key }}"{% endif %}
+                 {% if it.reserved or not it.editable %}disabled{% endif %}
+                 aria-label="{{ it.label }}">
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:12px">
+      <span class="muted small">
+        灰色「预留」项尚未接入代码，保存时会被忽略；改动后建议刷新页面确认生效。
+      </span>
+      <span class="row" style="gap:10px;margin:0">
+        <a class="btn btn-ghost" href="{{ url_for('admin.settings') }}">放弃修改</a>
+        <button type="submit">保存配置</button>
+      </span>
+    </div>
+  </div>
+</form>
+{% endblock %}

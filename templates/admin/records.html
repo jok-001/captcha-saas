@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import render_pager %}
+{% set active = 'admin_records' %}
+{% set page_title = '全部记录' %}
+{% block content %}
+
+{#- 页面契约（后端 admin.records 提供）
+    rows    : 同 records.html，额外有 user_id / username / operator
+    pager   : {page,per_page,total,pages,endpoint,args}，endpoint 已内置为 admin.records
+    kinds   : [{value,label}] × 5
+    users   : {id: username}
+    target  : 被筛选的用户 dict 或 None
+    filter_uid / kind / result / keyword / date_from / date_to : 回填用
+    filters : dict（含 uid / per_page）
+    summary : {total_calls,success_calls,total_spent,total_earned}
+-#}
+
+<div class="grid g4">
+  <div class="stat"><div class="n">{{ summary.total_calls }}</div><div class="l">总调用次数</div></div>
+  <div class="stat"><div class="n">{{ summary.success_calls }}</div><div class="l">成功次数</div></div>
+  <div class="stat"><div class="n">{{ summary.total_spent }}</div><div class="l">累计消耗积分</div></div>
+  <div class="stat"><div class="n">{{ summary.total_earned }}</div><div class="l">累计获得积分</div></div>
+</div>
+
+{% if target %}
+<div class="alert alert-info">
+  当前只显示用户「{{ target.username }}」的记录（#{{ target.id }}，余额 {{ target.credits }} 积分）
+  <a href="{{ url_for('admin.records') }}" style="margin-left:6px;font-weight:700">查看全部用户</a>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="row mb" style="justify-content:space-between;align-items:baseline;gap:12px">
+    <h3 style="margin:0">
+      全平台记录
+      <span class="muted small" style="font-weight:400">（共 {{ total }} 条{% if target %}，已按用户筛选{% endif %}）</span>
+    </h3>
+    {% if filters.keyword or filters.kind or filters.result or filters.uid or filters.date_from or filters.date_to %}
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.records') }}">重置筛选</a>
+    {% endif %}
+  </div>
+
+  <form method="get" action="{{ url_for('admin.records') }}" class="filters mb">
+    <select name="uid" aria-label="按用户筛选" onchange="this.form.submit()">
+      <option value="">全部用户</option>
+      {% for uid, name in users|dictsort(by='value') %}
+      <option value="{{ uid }}" {% if filter_uid|string == uid|string %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <select name="kind" aria-label="按类型筛选" onchange="this.form.submit()">
+      <option value="">全部类型</option>
+      {% for k in kinds %}
+      <option value="{{ k.value }}" {% if kind == k.value %}selected{% endif %}>{{ k.label }}</option>
+      {% endfor %}
+    </select>
+    <select name="result" aria-label="按结果筛选" onchange="this.form.submit()">
+      <option value="">全部结果</option>
+      <option value="success" {% if result == 'success' %}selected{% endif %}>成功</option>
+      <option value="fail" {% if result == 'fail' %}selected{% endif %}>失败</option>
+    </select>
+    <input class="f-keyword" name="keyword" value="{{ keyword }}" autocomplete="off"
+           placeholder="订单号 / 兑换码 / 类型 / 备注" aria-label="关键词搜索">
+    <input class="f-date" type="date" name="date_from" value="{{ date_from }}" aria-label="开始日期">
+    <span class="f-sep">~</span>
+    <input class="f-date" type="date" name="date_to" value="{{ date_to }}" aria-label="结束日期">
+    {% if filters.per_page %}<input type="hidden" name="per_page" value="{{ filters.per_page }}">{% endif %}
+    <span class="f-actions">
+      <button type="submit" class="btn btn-sm">筛选</button>
+    </span>
+  </form>
+
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="rec-table">
+      <thead>
+        <tr>
+          <th class="c-user">用户</th>
+          <th class="c-id">ID</th>
+          <th class="c-type">类型</th>
+          <th class="c-res">结果</th>
+          <th class="c-bal">余额</th>
+          <th class="c-dur">耗时</th>
+          <th class="c-time">时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="c-user">
+            <span class="rec-type-main">{{ r.username or ('#' ~ r.user_id) }}</span>
+            {% if r.operator %}
+            <span class="rec-type-sub" title="操作人：{{ r.operator }}">操作人 {{ r.operator }}</span>
+            {% endif %}
+          </td>
+          <td class="c-id">
+            {%- if r.id_label -%}
+            <span class="rec-id{% if r.kind == 'redeem' %} is-code{% endif %}" title="{{ r.id_label }}">{{ r.id_label }}</span>
+            {%- else -%}
+            <span class="rec-empty">—</span>
+            {%- endif -%}
+          </td>
+          <td class="c-type">
+            {% if r.biz_type %}
+            <span class="rec-type-main is-biz">{{ r.biz_type }}</span>
+            {% else %}
+            <span class="rec-type-main">{{ r.kind_label }}</span>
+            {% endif %}
+            {% if r.kind != 'solve' and r.reason and r.reason != r.kind_label %}
+            <span class="rec-type-sub" title="{{ r.reason }}">{{ r.reason }}</span>
+            {% endif %}
+          </td>
+          <td class="c-res">
+            {%- if r.result -%}
+            <span class="rec-badge {{ 'is-ok' if r.result == 'success' else 'is-fail' }}">{{ r.result_label }}</span>
+            {%- else -%}
+            <span class="rec-empty">—</span>
+            {%- endif -%}
+          </td>
+          <td class="c-bal">
+            <span class="rec-bal-num">{% if r.balance_after is not none %}{{ r.balance_after }}{% else %}—{% endif %}</span>
+            <span class="rec-delta {% if r.change > 0 %}is-up{% elif r.change < 0 %}is-down{% else %}is-zero{% endif %}">({{ r.change_label if r.change else 0 }})</span>
+          </td>
+          <td class="c-dur">
+            {%- if r.duration_label -%}{{ r.duration_label }}{%- else -%}<span class="rec-empty">—</span>{%- endif -%}
+          </td>
+          <td class="c-time">{{ r.created_at|ctime }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {{ render_pager(pager) }}
+  {% else %}
+  <p class="empty">
+    没有符合条件的记录
+    {% if filters.keyword or filters.kind or filters.result or filters.uid or filters.date_from or filters.date_to %}
+    ，换个条件试试
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -2,10 +2,19 @@ import re
 import time
 import app.db as db
 import config
-from app import admin_required
+from app import admin_required, parse_paging, pagination
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+# 与 web.KIND_OPTIONS 保持一致（避免跨模块循环导入，这里单独定义）
+RECORD_KINDS = [
+    {"value": "solve", "label": "验证码打码"},
+    {"value": "checkin", "label": "每日签到"},
+    {"value": "signup", "label": "注册赠送"},
+    {"value": "redeem", "label": "积分兑换"},
+    {"value": "adjust", "label": "系统调整"},
+]
 
 
 @bp.route("/")
@@ -126,29 +135,12 @@ def user_delete(uid):
 @bp.route("/user/<int:uid>/transactions")
 @admin_required
 def user_transactions(uid):
-    """查看单个用户的积分流水。"""
+    """已合并进 /admin/records（带 uid 筛选），保留路由做兼容重定向。"""
     u = db.get_user(uid)
     if not u:
         flash("用户不存在", "error")
         return redirect(url_for("admin.users"))
-    page = int(request.args.get("page", 1) or 1)
-    limit = 30
-    offset = (page - 1) * limit
-    keyword = (request.args.get("keyword") or "").strip()
-    change_type = request.args.get("change_type", "")
-    date_from = request.args.get("date_from", "")
-    date_to = request.args.get("date_to", "")
-    rows, total = db.list_transactions(uid, keyword=keyword or None,
-                                      change_type=change_type or None,
-                                      date_from=date_from or None,
-                                      date_to=date_to or None,
-                                      limit=limit, offset=offset)
-    admins = {r["id"]: r["username"] for r in db.q("SELECT id,username FROM users WHERE role='admin'")}
-    pages = (total + limit - 1) // limit
-    return render_template("admin/transactions.html", target=u, rows=rows,
-                           total=total, page=page, pages=pages, users={u["id"]: u["username"]},
-                           admins=admins, filter_uid=str(uid), keyword=keyword,
-                           change_type=change_type, date_from=date_from, date_to=date_to)
+    return redirect(url_for("admin.records", uid=uid))
 
 
 @bp.route("/pricing", methods=["GET", "POST"])
@@ -186,64 +178,127 @@ def pricing_delete():
     return redirect(url_for("admin.pricing"))
 
 
+_ADMIN_KEEP_ARGS = ("page", "per_page", "keyword", "date_from", "date_to",
+                    "kind", "result", "uid")
+
+
+def _to_admin_records(**extra):
+    q = {k: v for k, v in request.args.items() if k in _ADMIN_KEEP_ARGS and v}
+    q.update({k: v for k, v in extra.items() if v})
+    return redirect(url_for("admin.records", **q))
+
+
+@bp.route("/records")
+@admin_required
+def records():
+    """全局合并流水（用量 + 积分流水），可按用户/类型/结果/关键词/时间筛选。"""
+    a = request.args
+    page, per_page = parse_paging(a, 30)
+    uid_raw = (a.get("uid") or "").strip()
+    uid = int(uid_raw) if uid_raw.isdigit() else None
+    kind = (a.get("kind") or "").strip()
+    if kind not in [k["value"] for k in RECORD_KINDS]:
+        kind = ""
+    result = (a.get("result") or "").strip()
+    if result not in ("success", "fail"):
+        result = ""
+    keyword = (a.get("keyword") or "").strip()
+    date_from = (a.get("date_from") or "").strip()
+    date_to = (a.get("date_to") or "").strip()
+    filt = dict(kind=kind or None, result=result or None, keyword=keyword or None,
+                date_from=date_from or None, date_to=date_to or None)
+
+    rows, total = db.list_records(uid, limit=per_page, offset=(page - 1) * per_page, **filt)
+    pg = pagination(page, per_page, total)
+    if pg["offset"] != (page - 1) * per_page:
+        rows, total = db.list_records(uid, limit=pg["per_page"], offset=pg["offset"], **filt)
+        pg = pagination(pg["page"], pg["per_page"], total)
+
+    target = db.get_user(uid) if uid else None
+    pager = dict(pg, endpoint="admin.records", args={
+        k: v for k, v in (("uid", uid_raw if uid else ""), ("kind", kind),
+                          ("result", result), ("keyword", keyword),
+                          ("date_from", date_from), ("date_to", date_to)) if v})
+    return render_template(
+        "admin/records.html",
+        rows=rows, total=pg["total"], page=pg["page"], per_page=pg["per_page"],
+        pages=pg["pages"], has_prev=pg["has_prev"], has_next=pg["has_next"],
+        prev_page=pg["prev_page"], next_page=pg["next_page"],
+        first_item=pg["first_item"], last_item=pg["last_item"],
+        pager=pager,
+        kind=kind, result=result, keyword=keyword,
+        date_from=date_from, date_to=date_to,
+        filter_uid=uid_raw if uid else "",
+        filters={"kind": kind, "result": result, "keyword": keyword,
+                 "uid": uid_raw, "per_page": per_page,
+                 "date_from": date_from, "date_to": date_to},
+        kinds=RECORD_KINDS,
+        target=target,
+        users={r["id"]: r["username"] for r in db.q("SELECT id,username FROM users")},
+        summary=db.records_summary(uid),
+        pricing=db.get_pricing())
+
+
+@bp.route("/settings", methods=["GET", "POST"])
+@admin_required
+def settings():
+    """系统管理：配置项按 config.SETTINGS_SCHEMA 动态渲染，键值存 settings 表。
+
+    表单兼容两种形态（前端可整页一个 form，也可按分组拆多个 form）：
+      - 非布尔项：**只在表单里出现时才保存**，没出现视为「本表单不涉及」而不是空值报错
+      - 布尔项：checkbox 未勾选时浏览器不会提交该字段。因此「未勾选」只在
+        「同分组里有其它字段被提交」时才判定为 0；整组都没提交说明是别的分组的表单，跳过。
+        这样整页提交和分组提交都不会误清开关。
+    """
+    if request.method == "POST":
+        form = request.form
+        values = {}
+        for spec in config.SETTINGS_SCHEMA:
+            if spec.get("reserved") or spec["type"] == "bool":
+                continue
+            field = "s_" + spec["key"]
+            if field in form:
+                values[spec["key"]] = form.get(field, "")
+        for spec in config.SETTINGS_SCHEMA:
+            if spec.get("reserved") or spec["type"] != "bool":
+                continue
+            key, field = spec["key"], "s_" + spec["key"]
+            if field in form:
+                values[key] = 1 if form.get(field) else 0
+                continue
+            group = spec.get("group")
+            group_posted = any(
+                ("s_" + s["key"]) in form for s in config.SETTINGS_SCHEMA
+                if s.get("group") == group and s["type"] != "bool"
+                and not s.get("reserved"))
+            if group_posted:
+                values[key] = 0  # 同组表单已提交，未勾选即关闭
+        saved, errors = db.set_settings(values, session["user_id"])
+        if errors:
+            for e in errors:
+                flash(e, "error")
+        if saved:
+            flash("系统配置已保存（%d 项）" % len(saved), "success")
+        if not errors and not saved:
+            flash("没有可保存的配置项", "error")
+        return redirect(url_for("admin.settings"))
+    return render_template("admin/settings.html",
+                           groups=db.get_settings_groups(),
+                           settings_rows=db.get_settings_view())
+
+
 @bp.route("/usage")
 @admin_required
 def usage():
-    type_filter = request.args.get("type", "")
-    success_filter = request.args.get("success", "")
-    keyword = (request.args.get("keyword") or "").strip()
-    date_from = request.args.get("date_from", "")
-    date_to = request.args.get("date_to", "")
-    page = int(request.args.get("page", 1) or 1)
-    limit = 30
-    offset = (page - 1) * limit
-    rows, total = db.usage_stats(type_filter=type_filter or None,
-                                 success_filter=success_filter or None,
-                                 keyword=keyword or None,
-                                 date_from=date_from or None,
-                                 date_to=date_to or None,
-                                 limit=limit, offset=offset)
-    users = {u["id"]: u["username"] for u in db.q("SELECT id,username FROM users")}
-    pricing = db.get_pricing()
-    pages = (total + limit - 1) // limit
-    return render_template("admin/usage.html", rows=[dict(r) for r in rows], total=total,
-                           page=page, pages=pages, type_filter=type_filter,
-                           success_filter=success_filter, keyword=keyword,
-                           date_from=date_from, date_to=date_to,
-                           users=users, pricing=pricing)
+    """已合并进 /admin/records，保留路由做兼容重定向。"""
+    return _to_admin_records(kind="solve")
 
 
 @bp.route("/transactions")
 @admin_required
 def transactions():
-    """全局积分流水（可按用户、关键词、收支类型、时间范围筛选）。"""
-    uid = request.args.get("uid", "")
-    keyword = (request.args.get("keyword") or "").strip()
-    change_type = request.args.get("change_type", "")
-    date_from = request.args.get("date_from", "")
-    date_to = request.args.get("date_to", "")
-    page = int(request.args.get("page", 1) or 1)
-    limit = 30
-    offset = (page - 1) * limit
-    if uid and uid.isdigit():
-        rows, total = db.list_transactions(int(uid), keyword=keyword or None,
-                                           change_type=change_type or None,
-                                           date_from=date_from or None,
-                                           date_to=date_to or None,
-                                           limit=limit, offset=offset)
-    else:
-        uid = ""
-        rows, total = db.list_transactions(None, keyword=keyword or None,
-                                           change_type=change_type or None,
-                                           date_from=date_from or None,
-                                           date_to=date_to or None,
-                                           limit=limit, offset=offset)
-    users = {r["id"]: r["username"] for r in db.q("SELECT id,username FROM users")}
-    admins = {r["id"]: r["username"] for r in db.q("SELECT id,username FROM users WHERE role='admin'")}
-    pages = (total + limit - 1) // limit
-    return render_template("admin/transactions.html", rows=rows, total=total, page=page,
-                           pages=pages, users=users, admins=admins, filter_uid=uid, keyword=keyword,
-                           change_type=change_type, date_from=date_from, date_to=date_to)
+    """已合并进 /admin/records，保留路由做兼容重定向。"""
+    return _to_admin_records()
 
 
 @bp.route("/redeem", methods=["GET", "POST"])

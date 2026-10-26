@@ -7,8 +7,58 @@ DB_PATH = os.path.join(DATA_DIR, "saas.db")
 SECRET_KEY = os.environ.get("HUYA_SECRET_KEY", "changeme-secret-key")
 ADMIN_KEY = os.environ.get("HUYA_ADMIN_KEY", "changeme-admin-key")
 
-# 新用户注册赠送积分（测试额度，可在 .env 里改）
-SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "20"))
+# 新用户注册赠送积分。**已降级为兜底值**：真实值以 settings 表的 signup_bonus 为准
+# （管理员可在「系统管理」里改）。settings 行缺失时才回落到这里。
+SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "100"))
+
+# ---------------------------------------------------------------------------
+# 系统配置（键值表 settings 的元数据定义）
+#   - DB 只存 key -> value 字符串（纯 KV，不写死列，新增配置无需 DDL）
+#   - label/type/默认值/范围/分组 定义在这里，服务端按 schema 做类型转换与范围钳制
+#   - 新增配置项：往 SETTINGS_SCHEMA 追加一条即可，管理页自动渲染
+#   - reserved=True 表示「仅预留占位、代码暂不读取」，管理页灰色只读展示
+# ---------------------------------------------------------------------------
+SETTINGS_GROUPS = [
+    ("account", "账号与注册"),
+    ("checkin", "每日签到"),
+    ("security", "安全防护（预留）"),
+]
+
+SETTINGS_SCHEMA = [
+    {
+        "key": "signup_enabled", "label": "开放注册", "type": "bool", "default": 1,
+        "group": "account",
+        "description": "关闭后注册页与提交同时拦截；已注册账号不受影响",
+    },
+    {
+        "key": "signup_bonus", "label": "注册赠送积分", "type": "int", "default": 100,
+        "group": "account", "min": 0, "max": 100000,
+        "description": "只对之后的新注册生效，不追溯历史用户",
+    },
+    {
+        "key": "checkin_enabled", "label": "开启每日签到", "type": "bool", "default": 1,
+        "group": "checkin",
+        "description": "关闭后右上角入口保留，但点击提示未开放",
+    },
+    {
+        "key": "checkin_points", "label": "每次签到积分", "type": "int", "default": 100,
+        "group": "checkin", "min": 1, "max": 100000,
+        "description": "改动不影响历史签到记录（签到行已存当次积分快照）",
+    },
+    # ── 预留：只占位、不被代码读取，管理页灰色只读展示 ──────────────────
+    # 后续接入时：把 reserved 去掉 + 在目标路由里读 get_setting_bool(key) 即可，
+    # 无需 DDL、无需改模板（管理页按 schema 动态渲染）。
+    {
+        "key": "captcha_verify_enabled", "label": "登录/注册验证码校验", "type": "bool",
+        "default": 0, "group": "security", "reserved": True,
+        "description": "预留：接入行为验证码校验后生效",
+    },
+    {
+        "key": "waf_enabled", "label": "WAF 防护", "type": "bool",
+        "default": 0, "group": "security", "reserved": True,
+        "description": "预留：接入 WAF 后生效",
+    },
+]
 
 # 管理后台初始管理员账号（首次启动建库时写入；请登录后尽快改密）
 INIT_ADMIN_USERNAME = os.environ.get("INIT_ADMIN_USERNAME", "admin")
