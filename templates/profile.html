@@ -15,7 +15,6 @@
       <input name="email" type="email" value="{{ user.email or '' }}" placeholder="user@example.com">
       <div class="row mt">
         <button>保存资料</button>
-        <span class="muted small">当前积分：<b style="color:var(--brand)">{{ user.credits }}</b></span>
       </div>
     </form>
   </div>
@@ -41,6 +40,26 @@
     </form>
     {% endif %}
   </div>
+</div>
+
+<div class="card" style="max-width:560px">
+  <h3 style="margin:0 0 6px">兑换码充值</h3>
+  <p class="muted small">输入管理员发放的兑换码为账户积分充值；兑换成功后积分立即可用于 API 调用。</p>
+  <form method="post">
+    <input type="hidden" name="action" value="redeem">
+    <div class="row">
+      <div style="flex:1">
+        <label>兑换码</label>
+        <input name="code" placeholder="例如 A1B2C3D4..." style="text-transform:uppercase" required>
+      </div>
+      <div style="align-self:flex-end">
+        <button>兑换</button>
+      </div>
+    </div>
+  </form>
+  <p class="muted" style="font-size:12px;margin-top:12px">
+    没有兑换码？联系平台管理员获取。可用服务与单价见<a href="{{ url_for('web.dashboard') }}">仪表盘</a>。
+  </p>
 </div>
 
 <div class="card" style="max-width:560px">

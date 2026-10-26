@@ -27,7 +27,6 @@
       <a href="{{ url_for('web.dashboard') }}" class="{% if active=='dashboard' %}on{% endif %}">仪表盘</a>
       <a href="{{ url_for('web.profile') }}" class="{% if active=='profile' %}on{% endif %}">个人信息</a>
       <a href="{{ url_for('web.records') }}" class="{% if active=='records' %}on{% endif %}">使用记录</a>
-      <a href="{{ url_for('web.recharge') }}" class="{% if active=='recharge' %}on{% endif %}">积分 / 兑换</a>
       <a href="{{ url_for('web.docs') }}" class="{% if active=='docs' %}on{% endif %}">使用文档</a>
       {% if current_user.role == 'admin' %}
       <div class="nav-sep">管理</div>

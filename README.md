@@ -270,11 +270,10 @@ curl -X POST http://<ip>:9000/api/v1/solve \
 | `/login` | 登录 |
 | `/register` | 注册（赠送积分） |
 | `/dashboard` | 仪表盘 |
-| `/profile` | 个人信息（Token / 邮箱 / 改密） |
+| `/profile` | 个人信息（Token / 邮箱 / 改密 / **兑换码充值**） |
 | **`/records`** | **使用记录**（打码与积分变动合并视图，6 列：id / 类型 / 结果 / 余额 / 耗时 / 时间） |
 | `/usage` | 302 → `/records?kind=solve`（保留旧书签） |
 | `/transactions` | 302 → `/records`（保留旧书签） |
-| `/recharge` | 兑换码充值 |
 | `/docs` | **使用文档首页**（通用信息 + 接口列表 + 跳转按钮） |
 | `/docs/<type>` | **单个接口详细文档**（参数、示例、响应格式） |
 | `/admin/` | 管理后台（需 admin 角色） |

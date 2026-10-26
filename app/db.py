@@ -797,7 +797,8 @@ def reset_token(uid):
 
 # ---------- 定价 ----------
 def get_pricing():
-    return [dict(r) for r in q("SELECT * FROM pricing ORDER BY type")]
+    # 已接入(enabled=1)在前、规划中垫底，组内按类型名排序 —— 用户视角"能用的"永远在上面
+    return [dict(r) for r in q("SELECT * FROM pricing ORDER BY enabled DESC, type")]
 
 
 def get_price(type_name):

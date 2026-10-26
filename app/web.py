@@ -92,6 +92,13 @@ def profile():
         elif action == "reset_token":
             db.reset_token(uid)
             flash("Token 已重置，请立即复制保存（旧 Token 已失效）", "success")
+        elif action == "redeem":
+            code = (request.form.get("code") or "").strip().upper()
+            ok, res = db.redeem_code(code, uid)
+            if ok:
+                flash("兑换成功！当前积分: %d" % res, "success")
+            else:
+                flash("兑换失败: %s" % res, "error")
         elif action == "change_password":
             old = request.form.get("old_password", "")
             new = request.form.get("new_password", "")
@@ -280,19 +287,8 @@ def api_checkin():
 @bp.route("/recharge", methods=["GET", "POST"])
 @login_required
 def recharge():
-    uid = session["user_id"]
-    msg = None
-    if request.method == "POST":
-        code = (request.form.get("code") or "").strip().upper()
-        ok, res = db.redeem_code(code, uid)
-        if ok:
-            flash("兑换成功！当前积分: %d" % res, "success")
-        else:
-            flash("兑换失败: %s" % res, "error")
-        return redirect(url_for("web.recharge"))
-    # 展示可购买的“套餐”（此处为示意；实际需管理员发放兑换码或充值）
-    pricing = db.get_pricing()
-    return render_template("recharge.html", pricing=pricing)
+    """「积分 / 兑换」已并入个人信息页（兑换码充值卡片）。旧链接重定向保留书签兼容。"""
+    return redirect(url_for("web.profile"))
 
 
 @bp.route("/docs")
